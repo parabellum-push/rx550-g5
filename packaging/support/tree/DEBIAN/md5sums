@@ -1,0 +1,10 @@
+71669e3bc49a3ced1493f7cfb0575dd3  etc/apt/preferences.d/rx550-g5-mesa.pref
+72cbf8ba8b0e55f984016f0b2954387a  usr/lib/modprobe.d/rx550-g5.conf
+fcec97bad7a12c0ad573cc3a23656e21  usr/lib/modules-load.d/rx550-g5.conf
+199873e475840f3d43038defb54bc2e3  usr/lib/rx550-g5/enable-output
+14af53a39ecb78161d2252224446e67b  usr/lib/rx550-g5/load-module
+066e79416ae219081dc4c5494c17a5e4  usr/lib/systemd/system/rx550-g5-hotplug.service
+ea5d4a6c3e6eda43f561abadb98bb58a  usr/lib/systemd/system/rx550-g5.service
+c0517d201ee524319f6ae7a730d66f19  usr/lib/udev/rules.d/90-rx550-g5-hotplug.rules
+da5ab408328bacd015d3db283377f580  usr/share/doc/rx550-g5/README
+85dd322451693452c42d35207b45854d  usr/share/X11/xorg.conf.d/20-rx550-g5.conf

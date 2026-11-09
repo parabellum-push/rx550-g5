@@ -1,0 +1,19 @@
+Package: mesa-libgallium
+Source: mesa
+Version: 26.2.6-1
+Architecture: ppc64
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 39091
+Depends: libc6 (>= 2.43), libdrm-amdgpu1 (>= 2.4.134-3~), libdrm2 (>= 2.4.134-3~), libelf1t64 (>= 0.142), libexpat1 (>= 2.0.1), libgcc-s1 (>= 3.4), libllvm22 (>= 1:22.1.0), libsensors5 (>= 1:3.5.0), libstdc++6 (>= 11), libx11-xcb1, libxcb-dri3-0 (>= 1.13), libxcb-present0, libxcb-randr0, libxcb-sync1, libxcb-xfixes0, libxcb1 (>= 1.9.2), libxshmfence1, libzstd1 (>= 1.5.5), zlib1g (>= 1:1.1.4)
+Enhances: libva2
+Breaks: mesa-va-drivers (<< 25.2.8-3), mesa-vdpau-drivers (<< 25.2.8-3)
+Replaces: mesa-va-drivers (<< 25.2.8-3), mesa-vdpau-drivers (<< 25.2.8-3)
+Provides: libglapi-mesa, mesa-va-drivers, mesa-vdpau-drivers, va-driver
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://mesa3d.org/
+Description: shared infrastructure for Mesa drivers
+ This package contains libgallium, a private library shared between
+ multiple Mesa drivers. This library is an implementation detail of Mesa
+ and should not be used directly by user code.

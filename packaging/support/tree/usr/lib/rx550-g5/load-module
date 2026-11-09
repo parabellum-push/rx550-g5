@@ -1,0 +1,38 @@
+#!/bin/sh
+# Loads the big-endian amdgpu driver once the system is up, before the display manager.
+# A record left by an interrupted probe (hang or crash) stops automatic retries, so a
+# machine that fails to initialise the GPU still boots to a usable console.
+set -eu
+guard=/var/lib/rx550-g5/probe-in-progress
+found=
+for d in /sys/bus/pci/devices/*; do
+    test "$(cat "$d/vendor")" = 0x1002 || continue
+    case "$(cat "$d/class")" in 0x03*) found="$found ${d##*/}" ;; esac
+done
+if test -z "$found"; then
+    echo 'No AMD display device found; nothing to do'
+    exit 0
+fi
+if test -d /sys/module/amdgpu; then
+    echo "amdgpu already loaded, version $(cat /sys/module/amdgpu/version 2>/dev/null || echo unknown)"
+    exit 0
+fi
+if test -e "$guard"; then
+    echo 'amdgpu initialisation did not finish on an earlier boot; automatic loading is disabled.' >&2
+    echo "Remove $guard to try again (see /usr/share/doc/rx550-g5/README)." >&2
+    cat "$guard" >&2
+    exit 1
+fi
+mkdir -p /var/lib/rx550-g5
+printf 'boot_id=%s\nkernel=%s\ndevices=%s\n' "$(cat /proc/sys/kernel/random/boot_id)" "$(uname -r)" "$found" > "$guard"
+sync -f "$guard"
+/usr/sbin/modprobe amdgpu
+case "$(cat /sys/module/amdgpu/version 2>/dev/null)" in
+    g5-be-*) ;;
+    *) echo 'Loaded amdgpu is not the big-endian G5 build' >&2; exit 1 ;;
+esac
+rm -- "$guard"
+sync -f /var/lib/rx550-g5
+for dev in $found; do
+    echo "$dev: $(readlink /sys/bus/pci/devices/$dev/driver 2>/dev/null || echo no driver)"
+done

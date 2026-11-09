@@ -1,0 +1,17 @@
+Package: mesa-opencl-icd
+Source: mesa
+Version: 26.2.6-1
+Architecture: ppc64el
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 48541
+Depends: libclc-22, ocl-icd-libopencl1 | libopencl1, libc6 (>= 2.39), libclang-cpp22 (>= 1:22.1.8), libdrm-amdgpu1 (>= 2.4.134-3~), libdrm2 (>= 2.4.134-3~), libelf1t64 (>= 0.142), libexpat1 (>= 2.0.1), libgcc-s1 (>= 4.2), libllvm22 (>= 1:22.1.0), libllvmspirvlib22.1, libstdc++6 (>= 11), libzstd1 (>= 1.5.5), zlib1g (>= 1:1.1.4)
+Provides: opencl-icd
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://mesa3d.org/
+Description: free implementation of the OpenCL API -- ICD runtime
+ This package contains the mesa implementation of the OpenCL (Open Compute
+ Language) library, which is intended for use with an ICD loader. OpenCL
+ provides a standardized interface for computational analysis on graphical
+ processing units.

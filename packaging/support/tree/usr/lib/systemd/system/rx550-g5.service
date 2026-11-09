@@ -1,0 +1,16 @@
+[Unit]
+Description=Load the big-endian amdgpu driver (Radeon RX 550 on Power Mac G5)
+Documentation=file:/usr/share/doc/rx550-g5/README
+After=systemd-modules-load.service
+Before=display-manager.service graphical.target
+ConditionKernelVersion=*-rx550g5
+ConditionKernelCommandLine=!rx550.disable=1
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/rx550-g5/load-module
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

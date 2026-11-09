@@ -1,0 +1,16 @@
+Package: mesa-va-drivers
+Source: mesa
+Version: 26.2.6-1
+Architecture: ppc64
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Installed-Size: 35
+Depends: mesa-libgallium (>= 26.2.6-1)
+Section: oldlibs
+Priority: optional
+Multi-Arch: same
+Homepage: https://mesa3d.org/
+Description: Mesa VA-API graphics drivers - transitional package
+ This transitional package ensures that older versions of mesa-va-drivers
+ are replaced by mesa-libgallium during upgrades.
+ .
+ This is a transitional dummy package, it can be safely removed.

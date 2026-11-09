@@ -1,0 +1,16 @@
+Package: rx550-g5
+Version: 1.0+20261109.1
+Architecture: all
+Installed-Size: 112
+Maintainer: RX550 G5 port <root@localhost>
+Section: kernel
+Priority: optional
+Depends: linux-image-7.2.9+deb14-powerpc64-rx550g5, libgl1-mesa-dri (>= 26.2.6-1+rx550g5.2), libgl1-mesa-dri (<< 26.2.7), mesa-libgallium (>= 26.2.6-1+rx550g5.2), mesa-libgallium (<< 26.2.7), libegl-mesa0 (>= 26.2.6-1+rx550g5.2), libegl-mesa0 (<< 26.2.7), libglx-mesa0 (>= 26.2.6-1+rx550g5.2), libglx-mesa0 (<< 26.2.7), libgbm1 (>= 26.2.6-1+rx550g5.2), libgbm1 (<< 26.2.7), mesa-va-drivers (>= 26.2.6-1+rx550g5.2), mesa-va-drivers (<< 26.2.7), mesa-vdpau-drivers (>= 26.2.6-1+rx550g5.2), mesa-vdpau-drivers (<< 26.2.7), mesa-vulkan-drivers (>= 26.2.6-1+rx550g5.2), mesa-vulkan-drivers (<< 26.2.7), firmware-amd-graphics, kmod, systemd, udev
+Recommends: x11-xserver-utils, mesa-opencl-icd (>= 26.2.6-1+rx550g5.3)
+Conflicts: rx550-g5-be-kernel, rx550-g5-be-mesa
+Replaces: rx550-g5-be-kernel, rx550-g5-be-mesa
+Description: Radeon RX 550 support for big-endian Power Mac G5
+ Boot integration for the big-endian amdgpu kernel and Mesa packages: makes
+ GRUB start the -rx550g5 kernel, loads amdgpu before the display manager with
+ the options a Power Mac G5 needs, configures X for the RX 550, and pins the
+ Mesa packages so that other repositories do not replace them.

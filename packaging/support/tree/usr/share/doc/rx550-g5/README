@@ -1,0 +1,76 @@
+Radeon RX 550 on a big-endian Power Mac G5
+==========================================
+
+Packages
+--------
+  linux-image-7.2.9+deb14-powerpc64-rx550g5
+      Debian's 7.2.9 kernel configuration (built with GCC 13, so without BTF
+      type information), with the big-endian amdgpu driver
+      (command, MQD and ring byte order, display, VBIOS tables, HDMI/DP info
+      packets, VCE ring wrap, soft recovery) and g5_cpu_temp. Stock Debian
+      kernels stay installed as fallbacks in the GRUB "Advanced options" menu.
+  libgl1-mesa-dri libglapi-mesa libegl-mesa0 libglx-mesa0 libgbm1
+  mesa-va-drivers mesa-vdpau-drivers mesa-vulkan-drivers
+      Mesa 24.1.6 with the big-endian GFX8 fixes, replacing the packages of
+      the same names (version 24.1.6-1+rx550g5.N).
+  rx550-g5 (this package)
+      Boot integration, driver options, X configuration and an apt pin.
+
+Install
+-------
+  sudo apt install ./*.deb      (all files from the release directory)
+  sudo reboot
+
+Keep the original graphics card (GeForce 6600 or similar) installed and
+connected: the G5 firmware needs it to boot. The RX 550 drives the desktop.
+
+On plain Debian (not MintPPC), whose Mesa is newer, add --allow-downgrades.
+
+What this package does
+----------------------
+* Makes GRUB start the -rx550g5 kernel by default
+  (/etc/default/grub.d/90-rx550-g5.cfg, removed with the package).
+* rx550-g5.service loads amdgpu after boot and before the display manager.
+  amdgpu is blacklisted for automatic loading so that a GPU problem can never
+  stop the machine from booting: if a probe is interrupted (hang, crash,
+  power loss), the record /var/lib/rx550-g5/probe-in-progress stops further
+  automatic attempts. Delete it to try again.
+* Driver options (/usr/lib/modprobe.d/rx550-g5.conf):
+    runpm=0            keep the GPU powered (hotplug while suspended untested)
+    gpu_recovery=0     full GPU reset fails on the G5; soft recovery
+                       (killing a stuck shader) still runs
+    lockup_timeout=10000  valid long jobs take more than the 2 s default
+    ttm pages_limit=393216  GPU system memory goes through the 2 GB DART
+                       window that SATA, network, USB and audio share; cap at
+                       1.5 GB
+* X: the modesetting driver with a software cursor for amdgpu devices
+  (/usr/share/X11/xorg.conf.d/20-rx550-g5.conf). Files in
+  /etc/X11/xorg.conf.d take precedence.
+* An output connected after X started is switched on if nothing else is lit.
+* /etc/apt/preferences.d/rx550-g5-mesa.pref keeps apt from replacing the Mesa
+  packages with MintPPC's or Debian's builds.
+
+Recovery
+--------
+* Append rx550.disable=1 to the kernel command line in GRUB (press e) to
+  skip loading amdgpu, or pick a stock kernel under "Advanced options".
+* sudo apt remove rx550-g5 restores the previous GRUB default. To return to
+  stock Mesa, reinstall the distribution's packages, for example
+  sudo apt install --allow-downgrades libgl1-mesa-dri=24.1.6-1 ... (MintPPC).
+
+Video
+-----
+VA-API decode (H.264, HEVC 8/10-bit, MPEG-2) and VCE encode (H.264, HEVC)
+were tested with ffmpeg. HEVC 10-bit frames are little-endian P010, which
+ffmpeg labels p010be on this host, so converted output looks wrong although
+the decoded bytes are right. ffmpeg reports no VA support for MPEG-4 part 2
+and VP9 on this GPU. Mesa 26 has no VDPAU (removed upstream in 25.3); use VA-API.
+
+OpenCL
+------
+mesa-opencl-icd (Rusticl on radeonsi) is included since 26.2.6-1+rx550g5.3; see
+/usr/share/doc/libgl1-mesa-dri/README.rx550-g5. fp64 needs RUSTICL_FEATURES=fp64.
+
+Not working or not tested
+-------------------------
+* Booting with the original card unplugged hangs the G5 firmware.

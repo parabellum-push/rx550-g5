@@ -1,0 +1,12 @@
+
+/usr
+/usr/share
+/usr/share/bug
+/usr/share/bug/mesa-vdpau-drivers
+/usr/share/bug/mesa-vdpau-drivers/control
+/usr/share/bug/mesa-vdpau-drivers/script
+/usr/share/doc
+/usr/share/doc/mesa-vdpau-drivers
+/usr/share/doc/mesa-vdpau-drivers/changelog.Debian.gz
+/usr/share/doc/mesa-vdpau-drivers/changelog.gz
+/usr/share/doc/mesa-vdpau-drivers/copyright

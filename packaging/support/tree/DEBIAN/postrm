@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+case "$1" in
+remove|purge)
+    if test -e /etc/default/grub.d/90-rx550-g5.cfg; then
+        rm -f /etc/default/grub.d/90-rx550-g5.cfg
+        if command -v update-grub >/dev/null; then update-grub || true; fi
+    fi
+    if test -d /run/systemd/system; then systemctl daemon-reload || true; fi
+    ;;
+esac
+if test "$1" = purge; then rm -rf /var/lib/rx550-g5; fi

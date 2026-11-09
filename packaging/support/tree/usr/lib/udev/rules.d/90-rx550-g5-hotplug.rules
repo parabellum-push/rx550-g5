@@ -1,0 +1,2 @@
+# X leaves a newly connected output off if no RandR client is running (a display manager greeter has none).
+ACTION=="change", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{HOTPLUG}=="1", DRIVERS=="amdgpu", RUN+="/usr/bin/systemctl --no-block start rx550-g5-hotplug.service"

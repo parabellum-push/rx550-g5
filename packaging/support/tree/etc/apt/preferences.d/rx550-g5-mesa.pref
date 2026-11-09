@@ -1,0 +1,5 @@
+# Keep the RX550 big-endian Mesa build: other repositories (MintPPC's mesa-64, Debian's newer
+# Mesa) would otherwise replace it on the next upgrade. Remove the rx550-g5 package to drop this.
+Package: libgl1-mesa-dri mesa-libgallium libegl-mesa0 libglx-mesa0 libgbm1 mesa-va-drivers mesa-vdpau-drivers mesa-vulkan-drivers mesa-opencl-icd
+Pin: version 26.2.6-1+rx550g5*
+Pin-Priority: 1002

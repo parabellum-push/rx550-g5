@@ -1,0 +1,69 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b7400ea..0ef52c7 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -107,6 +107,8 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i686.*|i386.*|x86.*")
+     set(CLConform_TARGET_ARCH x86)
+ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "riscv.*")
+     set(CLConform_TARGET_ARCH RISCV)
++elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(ppc.*|powerpc.*)")
++    set(CLConform_TARGET_ARCH PPC)
+ endif()
+ 
+ if(NOT DEFINED CLConform_TARGET_ARCH)
+diff --git a/test_conformance/SVM/test_pointer_passing.cpp b/test_conformance/SVM/test_pointer_passing.cpp
+index aa1df4e..70d2110 100644
+--- a/test_conformance/SVM/test_pointer_passing.cpp
++++ b/test_conformance/SVM/test_pointer_passing.cpp
+@@ -101,8 +101,9 @@ REGISTER_TEST(svm_pointer_passing)
+                     kernel_verify_char, 0,
+                     pChar); // pass a pointer to a location within the buffer
+                 test_error(error, "clSetKernelArg failed");
++                cl_uchar expected = (cl_uchar)i; /* the first byte of an int is i only on LE */
+                 error = clSetKernelArg(kernel_verify_char, 2, sizeof(cl_uchar),
+-                                       (void *)&i); // pass the expected value
++                                       (void *)&expected); // pass the expected value
+                                                     // at the above location.
+                 test_error(error, "clSetKernelArg failed");
+                 error =
+diff --git a/test_conformance/SVM/test_shared_address_space_coarse_grain.cpp b/test_conformance/SVM/test_shared_address_space_coarse_grain.cpp
+index c5c9661..d4279ec 100644
+--- a/test_conformance/SVM/test_shared_address_space_coarse_grain.cpp
++++ b/test_conformance/SVM/test_shared_address_space_coarse_grain.cpp
+@@ -100,7 +100,7 @@ cl_int create_linked_lists_on_device(int ci, cl_command_queue cmdq, cl_mem alloc
+       0, NULL, NULL, &error);
+   test_error2(error, pAllocator, "clEnqueueMapBuffer failed");
+   // reset allocator index
+-  *pAllocator = numLists;   // the first numLists elements of the nodes array are already allocated (they hold the head of each list).
++  *(cl_int *)pAllocator = (cl_int)numLists;   /* the kernel reads an int (BE: not the first bytes of a size_t) */ // the first numLists elements of the nodes array are already allocated (they hold the head of each list).
+   error = clEnqueueUnmapMemObject(cmdq, allocator, pAllocator, 0,NULL,NULL);
+   test_error(error, " clEnqueueUnmapMemObject failed.");
+ 
+diff --git a/test_conformance/SVM/test_shared_address_space_fine_grain_buffers.cpp b/test_conformance/SVM/test_shared_address_space_fine_grain_buffers.cpp
+index 7f207d8..fce77df 100644
+--- a/test_conformance/SVM/test_shared_address_space_fine_grain_buffers.cpp
++++ b/test_conformance/SVM/test_shared_address_space_fine_grain_buffers.cpp
+@@ -24,7 +24,7 @@ cl_int create_linked_lists_on_device_no_map(int ci, cl_command_queue cmdq, size_
+   log_info("SVM: creating linked list on device: %d ", ci);
+ 
+   // reset allocator index
+-  *pAllocator = numLists;   // the first numLists elements of the nodes array are already allocated (they hold the head of each list).
++  *(cl_int *)pAllocator = (cl_int)numLists;   /* the kernel reads an int (BE: not the first bytes of a size_t) */ // the first numLists elements of the nodes array are already allocated (they hold the head of each list).
+   error = clEnqueueNDRangeKernel(cmdq, kernel_create_lists, 1, NULL, &numLists, NULL, 0, NULL, NULL);
+   test_error(error, "clEnqueueNDRange failed.");
+   error = clFinish(cmdq);
+diff --git a/test_conformance/api/test_sub_group_dispatch.cpp b/test_conformance/api/test_sub_group_dispatch.cpp
+index c1b88be..6aa136d 100644
+--- a/test_conformance/api/test_sub_group_dispatch.cpp
++++ b/test_conformance/api/test_sub_group_dispatch.cpp
+@@ -50,7 +50,9 @@ cl_int get_sub_group_num(cl_command_queue queue, cl_kernel kernel, clMemWrapper&
+     size = 0;
+     error = clSetKernelArg(kernel, 0, sizeof(out), &out);
+     error += clEnqueueNDRangeKernel(queue, kernel, dim, NULL, ndrange, ndrange, 0, NULL, NULL);
+-    error += clEnqueueReadBuffer(queue, out, CL_TRUE, 0, 4, &size, 0, NULL, NULL);
++    cl_int value = 0; /* the kernel writes an int; reading 4 bytes into a size_t is wrong on big endian */
++    error += clEnqueueReadBuffer(queue, out, CL_TRUE, 0, sizeof(value), &value, 0, NULL, NULL);
++    size = value;
+     return error;
+ }
+ 

@@ -1,0 +1,12 @@
+0e95e3e6b39f6c73f46c387e5eae6093  usr/lib/powerpc64-linux-gnu/libgallium-26.2.6-1.so
+7f0d95ab544ef194372363bb93229ede  usr/share/bug/mesa-libgallium/control
+114f277e413ffae0a725cc024a955b47  usr/share/bug/mesa-libgallium/script
+ed1e856093d77b560c9af5f84781b456  usr/share/doc/mesa-libgallium/changelog.Debian.gz
+db59eee4b30d73f42644550d2b917478  usr/share/doc/mesa-libgallium/changelog.gz
+f49f32e9ccc468af5b2f0d0a68d8b612  usr/share/doc/mesa-libgallium/copyright
+751a8f427d434db8a0b1594947f23155  usr/share/drirc.d/00-r300-defaults.conf
+e01c67d79071533a7a764a6057446704  usr/share/drirc.d/00-r600-defaults.conf
+47e7fc174018ac55c929cfb9ccf7bd32  usr/share/drirc.d/00-radeonsi-defaults.conf
+9ec612bda5e9a38ae796fbee54c05242  usr/share/drirc.d/00-virtio_gpu-defaults.conf
+237cdb43f090cad2fbf6413ead7d5170  usr/share/drirc.d/00-zink-defaults.conf
+d14cb11f66becfc9acd521b48b1be2bc  usr/share/lintian/overrides/mesa-libgallium

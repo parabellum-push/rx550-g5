@@ -1,0 +1,39 @@
+#!/bin/sh
+set -e
+KREL=7.2.9+deb14-powerpc64-rx550g5
+case "$1" in
+configure)
+    # Boot the RX550 kernel by default. /etc/default/grub.d is read after /etc/default/grub,
+    # so this overrides GRUB_DEFAULT there; removing this package restores it.
+    if command -v update-grub >/dev/null && command -v grub-probe >/dev/null; then
+        uuid=$(grub-probe --target=fs_uuid / 2>/dev/null || true)
+        if test -n "$uuid"; then
+            mkdir -p /etc/default/grub.d
+            cat > /etc/default/grub.d/90-rx550-g5.cfg <<CFG
+# Written by the rx550-g5 package; removed with it.
+GRUB_DEFAULT="gnulinux-advanced-$uuid>gnulinux-$KREL-advanced-$uuid"
+CFG
+            update-grub || echo "rx550-g5: update-grub failed; select $KREL in the boot menu" >&2
+        else
+            echo "rx550-g5: could not find the root file system UUID; select $KREL in the boot menu" >&2
+        fi
+    else
+        echo "rx550-g5: GRUB not found; make your boot loader start $KREL" >&2
+    fi
+    if test -d /run/systemd/system; then
+        systemctl daemon-reload
+        udevadm control --reload || true
+    fi
+    # Preserve the administrator's choice on upgrades.
+    if test -z "${2:-}"; then
+        systemctl enable rx550-g5.service >/dev/null 2>&1 || ln -sf /usr/lib/systemd/system/rx550-g5.service /etc/systemd/system/multi-user.target.wants/rx550-g5.service
+    fi
+    # Pick up the module options and blacklist in the initramfs.
+    if command -v update-initramfs >/dev/null && test -e /boot/initrd.img-$KREL; then
+        update-initramfs -u -k $KREL || true
+    fi
+    if test "$(uname -r)" != $KREL; then
+        echo "rx550-g5: reboot to start $KREL and the RX550 driver"
+    fi
+    ;;
+esac

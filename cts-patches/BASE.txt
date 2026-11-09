@@ -1,0 +1,2 @@
+vk-gl-cts base: https://github.com/KhronosGroup/VK-GL-CTS.git @ d9b9dbc65090317f01daba4d3f7cbec8ebf81f47
+opencl-cts base: https://github.com/KhronosGroup/OpenCL-CTS.git @ b02dd576744600e055b971ca9b2e8a57b9f40d60

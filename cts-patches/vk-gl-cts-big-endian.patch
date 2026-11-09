@@ -1,0 +1,1697 @@
+diff --git a/external/openglcts/modules/common/glcPixelStorageModesTests.cpp b/external/openglcts/modules/common/glcPixelStorageModesTests.cpp
+index 39889f1..aeb80c2 100644
+--- a/external/openglcts/modules/common/glcPixelStorageModesTests.cpp
++++ b/external/openglcts/modules/common/glcPixelStorageModesTests.cpp
+@@ -1175,6 +1175,21 @@ void TexImage3DCase::cleanup (void)
+ 	delete prog;
+ }
+ 
++/* Compressed blocks are little-endian bit streams; these tables are built as host words. */
++static void swapBlocksToLittleEndian (deUint64* blocks, size_t count)
++{
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	for (size_t i = 0; i < count; ++i)
++	{
++		deUint8* bytes = reinterpret_cast<deUint8*>(&blocks[i]);
++		std::reverse(bytes, bytes + sizeof(blocks[i]));
++	}
++#else
++	DE_UNREF(blocks);
++	DE_UNREF(count);
++#endif
++}
++
+ class CompressedTexImageUtils
+ {
+ public:
+@@ -1437,6 +1452,8 @@ void CompressedTexImage2DCase::generateSrcData_s3tc (void)
+ 		}
+ 	}
+ 
++	swapBlocksToLittleEndian(src, static_cast<size_t>(m_cuboid_w / m_bw * m_cuboid_h / m_bh));
++
+ 	m_src_data = (glw::GLubyte*)src;
+ }
+ 
+@@ -1470,6 +1487,8 @@ void CompressedTexImage2DCase::generateSrcData_astc (void)
+ 		}
+ 	}
+ 
++	swapBlocksToLittleEndian(src, static_cast<size_t>(img_size));
++
+ 	m_src_data = (glw::GLubyte*)src;
+ }
+ 
+@@ -1820,6 +1839,10 @@ void CompressedTexImage3DCase::generateSrcData_s3tc()
+ 		}
+ 	}
+ 
++	swapBlocksToLittleEndian(src, static_cast<size_t>(m_cuboid_w / m_bw *
++								 m_cuboid_h / m_bh *
++								 m_cuboid_d / m_bd));
++
+ 	m_src_data = (glw::GLubyte*)src;
+ }
+ 
+@@ -1868,6 +1891,8 @@ void CompressedTexImage3DCase::generateSrcData_astc (void)
+ 		}
+ 	}
+ 
++	swapBlocksToLittleEndian(src, static_cast<size_t>(img_size));
++
+ 	m_src_data = (glw::GLubyte*)src;
+ }
+ 
+diff --git a/external/openglcts/modules/common/glcTextureRepeatModeTests.cpp b/external/openglcts/modules/common/glcTextureRepeatModeTests.cpp
+index fae31ec..5b033f4 100644
+--- a/external/openglcts/modules/common/glcTextureRepeatModeTests.cpp
++++ b/external/openglcts/modules/common/glcTextureRepeatModeTests.cpp
+@@ -21,6 +21,7 @@
+  * \brief
+  */ /*-------------------------------------------------------------------*/
+ 
++#include <algorithm>
+ #include "glcTextureRepeatModeTests.hpp"
+ #include "deMath.h"
+ #include "gluContextInfo.hpp"
+@@ -1246,6 +1247,33 @@ tcu::TestNode::IterateResult TestClampModeForInternalFormat::iterate(void)
+ 	/* Reuse textureData buffer to initialize source texture.
+ 	 * Fill the buffer according to the color scheme */
+ 	fillTextureWithColor(&textureData[0], m_width, m_height, internalformat);
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	/* The tables hold little-endian pixels, but GL reads multi-byte types in host order. */
++	{
++		GLsizei element = 4;
++		switch (type)
++		{
++		case GL_UNSIGNED_BYTE:
++		case GL_BYTE:
++			element = 1;
++			break;
++		case GL_UNSIGNED_SHORT:
++		case GL_SHORT:
++		case GL_HALF_FLOAT:
++		case GL_UNSIGNED_SHORT_5_6_5:
++		case GL_UNSIGNED_SHORT_4_4_4_4:
++		case GL_UNSIGNED_SHORT_5_5_5_1:
++			element = 2;
++			break;
++		default:
++			break;
++		}
++		const GLsizei total = m_width * m_height * findFormat(internalformat)->pixelSize;
++		for (GLsizei p = 0; p + element <= total; p += element)
++			for (GLsizei lo = 0, hi = element - 1; lo < hi; ++lo, --hi)
++				std::swap(textureData[p + lo], textureData[p + hi]);
++	}
++#endif
+ 
+ 	/* Generate and bind the texture object that will store color scheme*/
+ 	GLuint sourceTextureId;
+diff --git a/external/openglcts/modules/gl/gl4cBufferStorageTests.cpp b/external/openglcts/modules/gl/gl4cBufferStorageTests.cpp
+index 3a5662e..278a53b 100644
+--- a/external/openglcts/modules/gl/gl4cBufferStorageTests.cpp
++++ b/external/openglcts/modules/gl/gl4cBufferStorageTests.cpp
+@@ -3423,7 +3423,11 @@ tcu::TestNode::IterateResult MapPersistentDrawTest::iterate()
+ 	static const size_t atom_data_size		 = 4 * sizeof(GLuint);
+ 	static const GLuint expected_atom_first  = 2;
+ 	static const GLuint expected_atom_second = 6;
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	static const GLuint expected_pixel		 = 0x040000ff; /* bytes 04 00 00 ff */
++#else
+ 	static const GLuint expected_pixel		 = 0xff000004;
++#endif
+ 	static const GLuint height				 = 16;
+ 	static const GLuint n_rectangles		 = 2;
+ 	static const GLuint pixel_size			 = 4 * sizeof(GLubyte);
+diff --git a/external/openglcts/modules/gl/gl4cGPUShaderFP64Tests.cpp b/external/openglcts/modules/gl/gl4cGPUShaderFP64Tests.cpp
+index 12a48e6..a40bb9f 100644
+--- a/external/openglcts/modules/gl/gl4cGPUShaderFP64Tests.cpp
++++ b/external/openglcts/modules/gl/gl4cGPUShaderFP64Tests.cpp
+@@ -12571,6 +12571,15 @@ static tcu::Matrix<glw::GLdouble, Rows, Cols> outerProduct(const tcu::Vector<glw
+ 	return result;
+ }
+ 
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++static glw::GLdouble packDouble2x32(const tcu::UVec2& in)
++{
++	const glw::GLuint buffer[2] = { in[1], in[0] };
++	glw::GLdouble	 result;
++	memcpy(&result, buffer, sizeof(result));
++	return result;
++}
++#else
+ static glw::GLdouble packDouble2x32(const tcu::UVec2& in)
+ {
+ 	const glw::GLuint buffer[2] = { in[0], in[1] };
+@@ -12578,6 +12587,7 @@ static glw::GLdouble packDouble2x32(const tcu::UVec2& in)
+ 	memcpy(&result, buffer, sizeof(result));
+ 	return result;
+ }
++#endif
+ 
+ template <typename T>
+ static T round(T t)
+@@ -12683,7 +12693,12 @@ static T trunc(T t)
+ static tcu::UVec2 unpackDouble2x32(const glw::GLdouble& val)
+ {
+ 	glw::GLuint* ptr = (glw::GLuint*)&val;
+-	tcu::UVec2   result(ptr[0], ptr[1]);
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	/* GLSL: x holds the low bits. */
++	tcu::UVec2 result(ptr[1], ptr[0]);
++#else
++	tcu::UVec2 result(ptr[0], ptr[1]);
++#endif
+ 
+ 	return result;
+ }
+diff --git a/external/openglcts/modules/gl/gl4cGlSpirvTests.cpp b/external/openglcts/modules/gl/gl4cGlSpirvTests.cpp
+index 678bb72..0ed334c 100644
+--- a/external/openglcts/modules/gl/gl4cGlSpirvTests.cpp
++++ b/external/openglcts/modules/gl/gl4cGlSpirvTests.cpp
+@@ -41,6 +41,16 @@
+ #include "tcuResource.hpp"
+ #include "tcuTestLog.hpp"
+ 
++/* glReadPixels of GL_RGBA bytes into a word: little-endian view of those bytes. */
++static inline deUint32 rgbaBytesToLeWord (deUint32 v)
++{
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	return ((v & 0xffu) << 24) | ((v & 0xff00u) << 8) | ((v >> 8) & 0xff00u) | (v >> 24);
++#else
++	return v;
++#endif
++}
++
+ using namespace glu;
+ using namespace glw;
+ 
+@@ -391,6 +401,8 @@ tcu::TestNode::IterateResult SpirvModulesPositiveTest::iterate()
+ 		GLU_EXPECT_NO_ERROR(gl.getError(), "glDisableVertexAttribArray");
+ 
+ 		gl.readPixels(16, 16, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)&outputs[it]);
++
++		outputs[it] = rgbaBytesToLeWord(outputs[it]);
+ 		GLU_EXPECT_NO_ERROR(gl.getError(), "glReadPixels");
+ 
+ 		if (program)
+@@ -604,8 +616,10 @@ tcu::TestNode::IterateResult SpirvShaderBinaryMultipleShaderObjectsTest::iterate
+ 	GLuint insidePixel;
+ 	GLuint outsidePixel;
+ 	gl.readPixels(16, 16, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)&insidePixel);
++	insidePixel = rgbaBytesToLeWord(insidePixel);
+ 	GLU_EXPECT_NO_ERROR(gl.getError(), "glReadPixels");
+ 	gl.readPixels(2, 30, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)&outsidePixel);
++	outsidePixel = rgbaBytesToLeWord(outsidePixel);
+ 	GLU_EXPECT_NO_ERROR(gl.getError(), "glReadPixels");
+ 
+ 	if (vbo)
+@@ -2062,6 +2076,8 @@ tcu::TestNode::IterateResult SpirvGlslToSpirVSpecializationConstantsTest::iterat
+ 	GLuint output;
+ 
+ 	gl.readPixels(16, 16, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)&output);
++
++	output = rgbaBytesToLeWord(output);
+ 	GLU_EXPECT_NO_ERROR(gl.getError(), "glReadPixels");
+ 
+ 	if (output != 0xFFFF0080)
+@@ -2669,6 +2685,7 @@ bool SpirvValidationBuiltInVariableDecorationsTest::validPerVertexFragFunc(Valid
+ 	{
+ 		GLuint output;
+ 		gl.readPixels(outputs[o].x, outputs[o].y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)&output);
++		output = rgbaBytesToLeWord(output);
+ 		GLU_EXPECT_NO_ERROR(gl.getError(), "glReadPixels");
+ 
+ 		if (!commonUtils::compareUintColors(output, outputs[o].value, 2))
+@@ -2753,6 +2770,7 @@ bool SpirvValidationBuiltInVariableDecorationsTest::validPerVertexPointFunc(Vali
+ 	{
+ 		GLuint output;
+ 		gl.readPixels(outputs[o].x, outputs[o].y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)&output);
++		output = rgbaBytesToLeWord(output);
+ 		GLU_EXPECT_NO_ERROR(gl.getError(), "glReadPixels");
+ 
+ 		if (!commonUtils::compareUintColors(output, outputs[o].value, 2))
+@@ -2955,6 +2973,7 @@ bool SpirvValidationBuiltInVariableDecorationsTest::validMultiSamplingFunc(Valid
+ 	{
+ 		GLuint output;
+ 		gl.readPixels(outputs[o].x, outputs[o].y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)&output);
++		output = rgbaBytesToLeWord(output);
+ 		GLU_EXPECT_NO_ERROR(gl.getError(), "glReadPixels");
+ 
+ 		// The fragment shader for this case is rendering to a 2-sample FBO discarding
+diff --git a/external/openglcts/modules/gl/gl4cShaderImageLoadStoreTests.cpp b/external/openglcts/modules/gl/gl4cShaderImageLoadStoreTests.cpp
+index f05ed39..53bfa64 100644
+--- a/external/openglcts/modules/gl/gl4cShaderImageLoadStoreTests.cpp
++++ b/external/openglcts/modules/gl/gl4cShaderImageLoadStoreTests.cpp
+@@ -6693,7 +6693,12 @@ class AdvancedCast : public ShaderImageLoadStoreBase
+ 					data[h * (getWindowWidth() * 4) + w * 4 + 0], data[h * (getWindowWidth() * 4) + w * 4 + 1],
+ 					data[h * (getWindowWidth() * 4) + w * 4 + 2], data[h * (getWindowWidth() * 4) + w * 4 + 3],
+ 				};
++				#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++				/* The test writes one 32-bit integer over rgba8: its bytes are host order. */
++				if (c[0] != 0 || c[1] != 0 || c[2] != 0 || c[3] != 1)
++#else
+ 				if (c[0] != 1 || c[1] != 0 || c[2] != 0 || c[3] != 0)
++#endif
+ 				{
+ 					m_context.getTestContext().getLog()
+ 						<< tcu::TestLog::Message << "Color is (" << c[0] << " " << c[1] << c[2] << " " << c[3]
+@@ -6714,7 +6719,12 @@ class AdvancedCast : public ShaderImageLoadStoreBase
+ 					data[h * (getWindowWidth() * 4) + w * 4 + 0], data[h * (getWindowWidth() * 4) + w * 4 + 1],
+ 					data[h * (getWindowWidth() * 4) + w * 4 + 2], data[h * (getWindowWidth() * 4) + w * 4 + 3],
+ 				};
++				#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++				/* The test writes one 32-bit integer over rgba8: its bytes are host order. */
++				if (c[0] != 0 || c[1] != 0 || c[2] != 0 || c[3] != 3)
++#else
+ 				if (c[0] != 3 || c[1] != 0 || c[2] != 0 || c[3] != 0)
++#endif
+ 				{
+ 					m_context.getTestContext().getLog()
+ 						<< tcu::TestLog::Message << "Color is (" << c[0] << " " << c[1] << c[2] << " " << c[3]
+diff --git a/external/openglcts/modules/gl/gl4cShadingLanguage420PackTests.cpp b/external/openglcts/modules/gl/gl4cShadingLanguage420PackTests.cpp
+index 58ac094..6ebeb84 100644
+--- a/external/openglcts/modules/gl/gl4cShadingLanguage420PackTests.cpp
++++ b/external/openglcts/modules/gl/gl4cShadingLanguage420PackTests.cpp
+@@ -41,6 +41,13 @@
+ #include <string>
+ #include <vector>
+ 
++/* These colours are host words holding GL_RGBA bytes in little-endian order. */
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++#define RGBA8_WORD(x) ((((x) & 0xffu) << 24) | (((x) & 0xff00u) << 8) | (((x) >> 8) & 0xff00u) | (((x) >> 24) & 0xffu))
++#else
++#define RGBA8_WORD(x) (x)
++#endif
++
+ #define IS_DEBUG 0
+ 
+ using namespace glw;
+@@ -1977,7 +1984,7 @@ void GLSLTestBase::bindTextureToSampler(Utils::program& program, Utils::texture&
+  **/
+ bool GLSLTestBase::checkResults(Utils::texture& color_texture) const
+ {
+-	static const GLuint		 green_color	   = 0xff00ff00;
++	static const GLuint		 green_color	   = RGBA8_WORD(0xff00ff00);
+ 	const GLuint			 texture_data_size = m_color_texture_width * m_color_texture_height;
+ 	std::vector<glw::GLuint> texture_data;
+ 
+@@ -2344,7 +2351,7 @@ bool NegativeTestBase::testDrawArray(bool use_version_400)
+ 
+ /* Constants used by BindingImageTest */
+ const GLuint BindingImageTest::m_width		 = 16;
+-const GLuint BindingImageTest::m_green_color = 0xff00ff00;
++const GLuint BindingImageTest::m_green_color = RGBA8_WORD(0xff00ff00);
+ const GLuint BindingImageTest::m_height		 = 16;
+ const GLuint BindingImageTest::m_depth		 = 6;
+ 
+@@ -2940,8 +2947,8 @@ const GLchar* LineContinuationTest::prepareSourceTexture(Utils::texture& texture
+ 	static const GLuint width	  = 64;
+ 	static const GLuint height	 = 64;
+ 	static const GLuint data_size  = width * height;
+-	static const GLuint blue_color = 0xffff0000;
+-	static const GLuint grey_color = 0xaaaaaaaa;
++	static const GLuint blue_color = RGBA8_WORD(0xffff0000);
++	static const GLuint grey_color = RGBA8_WORD(0xaaaaaaaa);
+ 
+ 	data.resize(data_size);
+ 
+@@ -3954,8 +3961,8 @@ const GLchar* UTF8CharactersTest::prepareSourceTexture(Utils::texture& texture)
+ 	static const GLuint width	  = 64;
+ 	static const GLuint height	 = 64;
+ 	static const GLuint data_size  = width * height;
+-	static const GLuint blue_color = 0xffff0000;
+-	static const GLuint grey_color = 0xaaaaaaaa;
++	static const GLuint blue_color = RGBA8_WORD(0xffff0000);
++	static const GLuint grey_color = RGBA8_WORD(0xaaaaaaaa);
+ 
+ 	data.resize(data_size);
+ 
+@@ -10163,9 +10170,9 @@ void BindingSamplersTest::prepareShaderSource(Utils::SHADER_STAGES in_stage, boo
+ void BindingSamplersTest::prepareUniforms(Utils::program& program)
+ {
+ 	(void)program;
+-	static const GLuint goku_data   = 0x000000ff;
+-	static const GLuint vegeta_data = 0x0000ff00;
+-	static const GLuint trunks_data = 0x00ff0000;
++	static const GLuint goku_data   = RGBA8_WORD(0x000000ff);
++	static const GLuint vegeta_data = RGBA8_WORD(0x0000ff00);
++	static const GLuint trunks_data = RGBA8_WORD(0x00ff0000);
+ 
+ 	prepareTexture(m_goku_texture, m_test_case, goku_data);
+ 	prepareTexture(m_vegeta_texture, m_test_case, vegeta_data);
+@@ -10501,7 +10508,7 @@ void BindingSamplerSingleTest::prepareShaderSource(Utils::SHADER_STAGES in_stage
+ void BindingSamplerSingleTest::prepareUniforms(Utils::program& program)
+ {
+ 	(void)program;
+-	static const GLuint goku_data = 0x000000ff;
++	static const GLuint goku_data = RGBA8_WORD(0x000000ff);
+ 
+ 	m_goku_texture.create(16, 16, GL_RGBA8);
+ 
+@@ -10768,7 +10775,7 @@ void BindingSamplerArrayTest::prepareShaderSource(Utils::SHADER_STAGES in_stage,
+ void BindingSamplerArrayTest::prepareUniforms(Utils::program& program)
+ {
+ 	static const GLuint goku_data[7] = {
+-		0x00000000, 0xff000000, 0x00ff0000, 0xffff0000, 0x0000ff00, 0xff00ff00, 0x00ffff00,
++		RGBA8_WORD(0x00000000), RGBA8_WORD(0xff000000), RGBA8_WORD(0x00ff0000), RGBA8_WORD(0xffff0000), RGBA8_WORD(0x0000ff00), RGBA8_WORD(0xff00ff00), RGBA8_WORD(0x00ffff00),
+ 	};
+ 
+ 	static const GLuint binding_offset = 1;
+@@ -11270,7 +11277,7 @@ void BindingSamplerAPIOverrideTest::prepareShaderSource(Utils::SHADER_STAGES in_
+  **/
+ void BindingSamplerAPIOverrideTest::prepareUniforms(Utils::program& program)
+ {
+-	static const GLuint goku_data   = 0x000000ff;
++	static const GLuint goku_data   = RGBA8_WORD(0x000000ff);
+ 	static const GLint  new_binding = 11;
+ 
+ 	const glw::Functions& gl = m_context.getRenderContext().getFunctions();
+@@ -11589,9 +11596,9 @@ const GLchar* BindingSamplerInvalidTest::getCaseString(TESTCASES test_case)
+ }
+ 
+ /* Constants used by BindingImagesTest */
+-const GLuint BindingImagesTest::m_goku_data   = 0x000000ff;
+-const GLuint BindingImagesTest::m_vegeta_data = 0x0000ff00;
+-const GLuint BindingImagesTest::m_trunks_data = 0x00ff0000;
++const GLuint BindingImagesTest::m_goku_data   = RGBA8_WORD(0x000000ff);
++const GLuint BindingImagesTest::m_vegeta_data = RGBA8_WORD(0x0000ff00);
++const GLuint BindingImagesTest::m_trunks_data = RGBA8_WORD(0x00ff0000);
+ 
+ /** Constructor
+  *
+@@ -12295,7 +12302,7 @@ void BindingImageSingleTest::prepareShaderSource(Utils::SHADER_STAGES in_stage,
+ void BindingImageSingleTest::prepareUniforms(Utils::program& program)
+ {
+ 	(void)program;
+-	static const GLuint goku_data = 0x000000ff;
++	static const GLuint goku_data = RGBA8_WORD(0x000000ff);
+ 
+ 	prepareTexture(m_goku_texture, Utils::buffer(m_context), Utils::TEX_2D, goku_data, 2 /* unit */);
+ }
+@@ -12579,7 +12586,7 @@ void BindingImageArrayTest::prepareShaderSource(Utils::SHADER_STAGES in_stage, b
+ void BindingImageArrayTest::prepareUniforms(Utils::program& program)
+ {
+ 	static const GLuint goku_data[7] = {
+-		0x00000000, 0xff000000, 0x00ff0000, 0xffff0000, 0x0000ff00, 0xff00ff00, 0x00ffff00,
++		RGBA8_WORD(0x00000000), RGBA8_WORD(0xff000000), RGBA8_WORD(0x00ff0000), RGBA8_WORD(0xffff0000), RGBA8_WORD(0x0000ff00), RGBA8_WORD(0xff00ff00), RGBA8_WORD(0x00ffff00),
+ 	};
+ 
+ 	Utils::texture* textures[7] = {
+@@ -13116,7 +13123,7 @@ void BindingImageAPIOverrideTest::prepareShaderSource(Utils::SHADER_STAGES in_st
+  **/
+ void BindingImageAPIOverrideTest::prepareUniforms(Utils::program& program)
+ {
+-	static const GLuint goku_data   = 0x000000ff;
++	static const GLuint goku_data   = RGBA8_WORD(0x000000ff);
+ 	static const GLint  new_binding = 7;
+ 
+ 	const glw::Functions& gl = m_context.getRenderContext().getFunctions();
+diff --git a/external/openglcts/modules/gl/gl4cStencilTexturingTests.cpp b/external/openglcts/modules/gl/gl4cStencilTexturingTests.cpp
+index 2bdfa17..7a5c25f 100644
+--- a/external/openglcts/modules/gl/gl4cStencilTexturingTests.cpp
++++ b/external/openglcts/modules/gl/gl4cStencilTexturingTests.cpp
+@@ -1056,12 +1056,18 @@ void FunctionalTest::prepareSourceTextureData(GLenum internal_format, std::vecto
+ 			switch (pixel_size)
+ 			{
+ 			case 4:
+-				memcpy(pixel_data, stencil_data, 1);
+-				memcpy(pixel_data + 1, depth_i_data, 3);
++				{
++					/* One host word: depth above stencil. */
++					const GLuint word = (depth_i << 8) | (stencil & 0xff);
++					memcpy(pixel_data, &word, 4);
++				}
+ 				break;
+ 			case 8:
+ 				memcpy(pixel_data, depth_f_data, 4);
+-				memcpy(pixel_data + 4, stencil_data, 1);
++				{
++					const GLuint word = stencil & 0xff;
++					memcpy(pixel_data + 4, &word, 4);
++				}
+ 				break;
+ 			default:
+ 				TCU_FAIL("Invalid value");
+@@ -1142,7 +1148,11 @@ bool FunctionalTest::verifyTexture(GLuint id, GLenum source_internal_format, boo
+ 		if (true == is_stencil) /* Stencil channel */
+ 		{
+ 			const GLubyte dst_stencil = dst_pixel_data[0];
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++			const GLubyte src_stencil = src_pixel_data[src_stencil_off + 3];
++#else
+ 			const GLubyte src_stencil = src_pixel_data[src_stencil_off];
++#endif
+ 
+ 			if (src_stencil != dst_stencil)
+ 			{
+@@ -1162,7 +1172,8 @@ bool FunctionalTest::verifyTexture(GLuint id, GLenum source_internal_format, boo
+ 				GLfloat src_depth_f = 0.0f;
+ 
+ 				memcpy(&dst_depth, dst_pixel_data, 4);
+-				memcpy(&src_depth_i, src_pixel_data + 1, 3);
++				memcpy(&src_depth_i, src_pixel_data, 4);
++				src_depth_i >>= 8;
+ 
+ 				src_depth_f = ((GLfloat)src_depth_i) / ((GLfloat)0xffffff);
+ 
+diff --git a/external/openglcts/modules/gles31/es31cLayoutBindingTests.cpp b/external/openglcts/modules/gles31/es31cLayoutBindingTests.cpp
+index 4de8fe0..8a910c7 100644
+--- a/external/openglcts/modules/gles31/es31cLayoutBindingTests.cpp
++++ b/external/openglcts/modules/gles31/es31cLayoutBindingTests.cpp
+@@ -42,6 +42,16 @@
+ #include "gluTexture.hpp"
+ #include "gluTextureUtil.hpp"
+ 
++/* glReadPixels of GL_RGBA bytes into a word: little-endian view of those bytes. */
++static inline deUint32 rgbaBytesToLeWord (deUint32 v)
++{
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	return ((v & 0xffu) << 24) | ((v & 0xff00u) << 8) | ((v >> 8) & 0xff00u) | (v >> 24);
++#else
++	return v;
++#endif
++}
++
+ namespace glcts
+ {
+ 
+@@ -1221,6 +1231,7 @@ LayoutBindingTestResult LayoutBindingBaseCase::drawTestCompute(glw::GLint progra
+ 		l_gl.framebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+ 
+ 		l_gl.readPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &something);
++		something = rgbaBytesToLeWord(something);
+ 
+ 		l_gl.bindFramebuffer(GL_FRAMEBUFFER, 0);
+ 		l_gl.deleteFramebuffers(1, &fb_or_ssb);
+diff --git a/external/openglcts/modules/gles31/es31cShaderBitfieldOperationTests.cpp b/external/openglcts/modules/gles31/es31cShaderBitfieldOperationTests.cpp
+index ce02c42..817a015 100644
+--- a/external/openglcts/modules/gles31/es31cShaderBitfieldOperationTests.cpp
++++ b/external/openglcts/modules/gles31/es31cShaderBitfieldOperationTests.cpp
+@@ -884,6 +884,14 @@ static GLuint bitCount(GLuint input)
+ 	return result;
+ }
+ 
++/* Calling bitCount through a cast signature is undefined: on PowerPC a negative int
++ * arrives sign-extended to 64 bits and the loop counts 64 of them.
++ */
++static GLint bitCountSigned(GLint input)
++{
++	return static_cast<GLint>(bitCount(static_cast<GLuint>(input)));
++}
++
+ static GLuint findLSB(GLuint input)
+ {
+ 	if (!input)
+@@ -1594,7 +1602,7 @@ void ShaderBitfieldOperationTests::init(void)
+ 	} commonTests[] = {
+ 		{ "bitfieldReverse", bitfieldReverse,
+ 		  reinterpret_cast<UnaryIFunc>(bitfieldReverse) },				  // shader_bitfield_operation.bitfieldReverse
+-		{ "bitCount", bitCount, reinterpret_cast<UnaryIFunc>(bitCount) }, // shader_bitfield_operation.bitCount
++		{ "bitCount", bitCount, bitCountSigned }, // shader_bitfield_operation.bitCount
+ 		{ "findLSB", findLSB, reinterpret_cast<UnaryIFunc>(findLSB) },	// shader_bitfield_operation.findLSB
+ 		{ "findMSB", findMSBU, findMSBI },								  // shader_bitfield_operation.findMSB
+ 	};
+diff --git a/external/vulkancts/data/vulkan/amber/spirv_assembly/instruction/spirv1p4/uconvert/spec_const_opt_truncate_16.amber b/external/vulkancts/data/vulkan/amber/spirv_assembly/instruction/spirv1p4/uconvert/spec_const_opt_truncate_16.amber
+index 0df255d..c7b7c4e 100644
+--- a/external/vulkancts/data/vulkan/amber/spirv_assembly/instruction/spirv1p4/uconvert/spec_const_opt_truncate_16.amber
++++ b/external/vulkancts/data/vulkan/amber/spirv_assembly/instruction/spirv1p4/uconvert/spec_const_opt_truncate_16.amber
+@@ -43,9 +43,9 @@ Storage16BitFeatures.storageBuffer16BitAccess
+                OpFunctionEnd
+ [test]
+ ssbo 0:1 4
+-ssbo 0:1 subdata uint8_t 0 0 0
++ssbo 0:1 subdata uint16_t 0 0
+ 
+ compute entrypoint main
+ compute 1 1 1
+ 
+-probe ssbo uint8_t 0:1 0 == 16 0
++probe ssbo uint16_t 0:1 0 == 16
+diff --git a/external/vulkancts/data/vulkan/amber/spirv_assembly/instruction/spirv1p4/uconvert/spec_const_opt_truncate_983040.amber b/external/vulkancts/data/vulkan/amber/spirv_assembly/instruction/spirv1p4/uconvert/spec_const_opt_truncate_983040.amber
+index 7bdb249..b132a79 100644
+--- a/external/vulkancts/data/vulkan/amber/spirv_assembly/instruction/spirv1p4/uconvert/spec_const_opt_truncate_983040.amber
++++ b/external/vulkancts/data/vulkan/amber/spirv_assembly/instruction/spirv1p4/uconvert/spec_const_opt_truncate_983040.amber
+@@ -42,9 +42,9 @@ Storage16BitFeatures.storageBuffer16BitAccess
+                OpFunctionEnd
+ [test]
+ ssbo 0:1 4
+-ssbo 0:1 subdata uint8_t 0 0 0
++ssbo 0:1 subdata uint16_t 0 0
+ 
+ compute entrypoint main
+ compute 1 1 1
+ 
+-probe ssbo uint8_t 0:1 0 == 1 0
++probe ssbo uint16_t 0:1 0 == 1
+diff --git a/external/vulkancts/framework/vulkan/vkApiVersion.cpp b/external/vulkancts/framework/vulkan/vkApiVersion.cpp
+index d996cb0..26e41ce 100644
+--- a/external/vulkancts/framework/vulkan/vkApiVersion.cpp
++++ b/external/vulkancts/framework/vulkan/vkApiVersion.cpp
+@@ -134,7 +134,8 @@ deUint32 minVulkanAPIVersion(deUint32 lhs, deUint32 rhs)
+ 	for (auto it = begin(commonPredecessors); it != end(commonPredecessors); ++it)
+ 		if (isApiVersionPredecessor(rhs, *it) && isApiVersionPredecessor(lhs, *it))
+ 			return *it;
+-	return 0;
++	// Local G5 test build: a loader newer than this CTS release is not in the table.
++	return lhsp < rhsp ? lhsp : rhsp;
+ }
+ 
+ } // vk
+diff --git a/external/vulkancts/framework/vulkan/vkImageUtil.cpp b/external/vulkancts/framework/vulkan/vkImageUtil.cpp
+index facb349..23857e5 100644
+--- a/external/vulkancts/framework/vulkan/vkImageUtil.cpp
++++ b/external/vulkancts/framework/vulkan/vkImageUtil.cpp
+@@ -126,6 +126,7 @@ bool isSrgbFormat (VkFormat format)
+ 		case tcu::TextureFormat::sRGBA:
+ 		case tcu::TextureFormat::sBGR:
+ 		case tcu::TextureFormat::sBGRA:
++		case tcu::TextureFormat::sABGR:
+ 			return true;
+ 
+ 		default:
+@@ -1311,9 +1312,7 @@ PlanarFormatDescription getCorePlanarFormatDescription (VkFormat format)
+ 
+ 	DE_ASSERT(de::inBounds<deUint32>(format, VK_FORMAT_UNDEFINED+1, VK_CORE_FORMAT_LAST));
+ 
+-#if (DE_ENDIANNESS != DE_LITTLE_ENDIAN)
+-#	error "Big-endian is not supported"
+-#endif
++// Local G5 test build: the bit layouts below assume little-endian for multi-byte packed formats.
+ 
+ 	switch (format)
+ 	{
+@@ -2989,6 +2988,14 @@ VkFormat mapTextureFormat (const tcu::TextureFormat& format)
+ 		case FMT_CASE(RGB, SIGNED_INT8):					return VK_FORMAT_R8G8B8_SINT;
+ 		case FMT_CASE(sRGB, UNORM_INT8):					return VK_FORMAT_R8G8B8_SRGB;
+ 
++		// Local G5 test build: the big-endian view of the A8B8G8R8 packed formats.
++		case FMT_CASE(ABGR, UNORM_INT8):					return VK_FORMAT_A8B8G8R8_UNORM_PACK32;
++		case FMT_CASE(ABGR, SNORM_INT8):					return VK_FORMAT_A8B8G8R8_SNORM_PACK32;
++		case FMT_CASE(ABGR, USCALED_INT8):					return VK_FORMAT_A8B8G8R8_USCALED_PACK32;
++		case FMT_CASE(ABGR, SSCALED_INT8):					return VK_FORMAT_A8B8G8R8_SSCALED_PACK32;
++		case FMT_CASE(ABGR, UNSIGNED_INT8):					return VK_FORMAT_A8B8G8R8_UINT_PACK32;
++		case FMT_CASE(ABGR, SIGNED_INT8):					return VK_FORMAT_A8B8G8R8_SINT_PACK32;
++		case FMT_CASE(sABGR, UNORM_INT8):					return VK_FORMAT_A8B8G8R8_SRGB_PACK32;
+ 		case FMT_CASE(RGBA, UNORM_INT8):					return VK_FORMAT_R8G8B8A8_UNORM;
+ 		case FMT_CASE(RGBA, SNORM_INT8):					return VK_FORMAT_R8G8B8A8_SNORM;
+ 		case FMT_CASE(RGBA, UNSIGNED_INT8):					return VK_FORMAT_R8G8B8A8_UINT;
+@@ -3358,7 +3365,14 @@ tcu::TextureFormat mapVkFormat (VkFormat format)
+ 		case VK_FORMAT_A8B8G8R8_SINT_PACK32:	return TextureFormat(TextureFormat::RGBA,	TextureFormat::SIGNED_INT8);
+ 		case VK_FORMAT_A8B8G8R8_SRGB_PACK32:	return TextureFormat(TextureFormat::sRGBA,	TextureFormat::UNORM_INT8);
+ #else
+-#	error "Big-endian not supported"
++		// Local G5 test build: a host-order packed word stores its bytes as A, B, G, R.
++		case VK_FORMAT_A8B8G8R8_UNORM_PACK32:	return TextureFormat(TextureFormat::ABGR,	TextureFormat::UNORM_INT8);
++		case VK_FORMAT_A8B8G8R8_SNORM_PACK32:	return TextureFormat(TextureFormat::ABGR,	TextureFormat::SNORM_INT8);
++		case VK_FORMAT_A8B8G8R8_USCALED_PACK32:	return TextureFormat(TextureFormat::ABGR,	TextureFormat::USCALED_INT8);
++		case VK_FORMAT_A8B8G8R8_SSCALED_PACK32:	return TextureFormat(TextureFormat::ABGR,	TextureFormat::SSCALED_INT8);
++		case VK_FORMAT_A8B8G8R8_UINT_PACK32:	return TextureFormat(TextureFormat::ABGR,	TextureFormat::UNSIGNED_INT8);
++		case VK_FORMAT_A8B8G8R8_SINT_PACK32:	return TextureFormat(TextureFormat::ABGR,	TextureFormat::SIGNED_INT8);
++		case VK_FORMAT_A8B8G8R8_SRGB_PACK32:	return TextureFormat(TextureFormat::sABGR,	TextureFormat::UNORM_INT8);
+ #endif
+ 
+ 		case VK_FORMAT_A2R10G10B10_UNORM_PACK32:	return TextureFormat(TextureFormat::BGRA,	TextureFormat::UNORM_INT_1010102_REV);
+diff --git a/external/vulkancts/framework/vulkan/vkPrograms.cpp b/external/vulkancts/framework/vulkan/vkPrograms.cpp
+index 7ae5248..e7fdea1 100644
+--- a/external/vulkancts/framework/vulkan/vkPrograms.cpp
++++ b/external/vulkancts/framework/vulkan/vkPrograms.cpp
+@@ -58,7 +58,8 @@ using std::map;
+ #	define VALIDATE_BINARIES	false
+ #endif
+ 
+-#define SPIRV_BINARY_ENDIANNESS DE_LITTLE_ENDIAN
++// Local G5 test build: keep binaries in host order instead of translating them.
++#define SPIRV_BINARY_ENDIANNESS DE_ENDIANNESS
+ 
+ // ProgramBinary
+ 
+diff --git a/external/vulkancts/framework/vulkan/vkWsiPlatform.cpp b/external/vulkancts/framework/vulkan/vkWsiPlatform.cpp
+index aa9f5ca..1ee77aa 100644
+--- a/external/vulkancts/framework/vulkan/vkWsiPlatform.cpp
++++ b/external/vulkancts/framework/vulkan/vkWsiPlatform.cpp
+@@ -30,8 +30,8 @@ namespace wsi
+ 
+ void Window::setVisible (bool visible)
+ {
++	// Local G5 test build: the headless target's window has nothing to show.
+ 	DE_UNREF(visible);
+-	TCU_THROW(InternalError, "setVisible() called on window not supporting it");
+ }
+ 
+ void Window::setForeground(void)
+diff --git a/external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp b/external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp
+index 5a6a046..9bdf008 100644
+--- a/external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp
++++ b/external/vulkancts/modules/vulkan/api/vktApiBufferViewAccessTests.cpp
+@@ -1100,6 +1100,10 @@ bool isSupportedImageLoadStore (const tcu::TextureFormat& format)
+ 		switch (format.order)
+ 		{
+ 			case tcu::TextureFormat::RGBA:
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++			// Local G5 test build: a8b8g8r8 maps to ABGR here; shaders still see r,g,b,a.
++			case tcu::TextureFormat::ABGR:
++#endif
+ 				break;
+ 			default:
+ 				return false;
+diff --git a/external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp b/external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp
+index 55e9bde..0662516 100644
+--- a/external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp
++++ b/external/vulkancts/modules/vulkan/api/vktApiCopiesAndBlittingTests.cpp
+@@ -1193,6 +1193,7 @@ CopyImageToImage::CopyImageToImage (Context& context, TestParams params)
+ 			m_sparseSemaphore = createSemaphore(vk, m_device);
+ 			allocateAndBindSparseImage(vk, m_device, vkPhysDevice, vki, sourceImageParams, m_sparseSemaphore.get(), context.getSparseQueue(), *m_allocator,
+ 				 m_sparseAllocations, mapVkFormat(sourceImageParams.format), m_source.get());
++			VK_CHECK(vk.queueWaitIdle(context.getSparseQueue())); // G5: upload below does not wait on the bind semaphore
+ 		}
+ #endif
+ 	}
+@@ -1681,6 +1682,7 @@ CopyImageToImageMipmap::CopyImageToImageMipmap (Context& context, TestParams par
+ 			m_sparseSemaphore = createSemaphore(vk, m_device);
+ 			allocateAndBindSparseImage(vk, m_device, vkPhysDevice, vki, sourceImageParams, m_sparseSemaphore.get(), context.getSparseQueue(), *m_allocator,
+ 				 m_sparseAllocations, mapVkFormat(sourceImageParams.format), m_source.get());
++			VK_CHECK(vk.queueWaitIdle(context.getSparseQueue())); // G5: upload below does not wait on the bind semaphore
+ 		}
+ #endif
+ 	}
+@@ -2349,6 +2351,7 @@ CopyImageToBuffer::CopyImageToBuffer (Context& context, TestParams testParams)
+ 			m_sparseSemaphore = createSemaphore(vk, m_device);
+ 			allocateAndBindSparseImage(vk, m_device, vkPhysDevice, vki, sourceImageParams, m_sparseSemaphore.get(), context.getSparseQueue(), *m_allocator,
+ 				 m_sparseAllocations, mapVkFormat(sourceImageParams.format), m_source.get());
++			VK_CHECK(vk.queueWaitIdle(context.getSparseQueue())); // G5: upload below does not wait on the bind semaphore
+ 		}
+ #endif
+ 	}
+@@ -2850,6 +2853,7 @@ CopyBufferToImage::CopyBufferToImage (Context& context, TestParams testParams)
+ 			m_destination = createImage(vk, m_device, &destinationImageParams);
+ 			m_sparseSemaphore = createSemaphore(vk, m_device);
+ 			allocateAndBindSparseImage(vk, m_device, vkPhysDevice, vki, destinationImageParams, m_sparseSemaphore.get(), context.getSparseQueue(), *m_allocator, m_sparseAllocations, mapVkFormat(destinationImageParams.format), m_destination.get());
++			VK_CHECK(vk.queueWaitIdle(context.getSparseQueue())); // G5: upload below does not wait on the bind semaphore
+ 		}
+ #endif
+ 	}
+@@ -3164,6 +3168,7 @@ CopyBufferToDepthStencil::CopyBufferToDepthStencil(Context& context, TestParams
+ 			m_sparseSemaphore = createSemaphore(vk, m_device);
+ 			allocateAndBindSparseImage(vk, m_device, vkPhysDevice, vki, destinationImageParams, m_sparseSemaphore.get(), context.getSparseQueue(), *m_allocator,
+ 				 m_sparseAllocations, mapVkFormat(destinationImageParams.format), m_destination.get());
++			VK_CHECK(vk.queueWaitIdle(context.getSparseQueue())); // G5: upload below does not wait on the bind semaphore
+ 		}
+ #endif
+ 	}
+@@ -3493,6 +3498,11 @@ CompressedTextureForBlit::CompressedTextureForBlit(const tcu::CompressedTexForma
+ 		{
+ 			deUint32 selectedBlock = random.getUint32() % static_cast<deUint32>(validBlocks.size());
+ 			deMemcpy(compressedDataUint32, validBlocks[selectedBlock].data(), sizeof(BC6HBlock));
++			#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++			// The table holds host words; a BC6H block is a little-endian bit stream.
++			for (deUint32 wordNdx = 0; wordNdx < 4; wordNdx++)
++				compressedDataUint32[wordNdx] = deReverseBytes32(compressedDataUint32[wordNdx]);
++			#endif
+ 			compressedDataUint32 += 4;
+ 		}
+ 	}
+@@ -3617,6 +3627,7 @@ BlittingImages::BlittingImages (Context& context, TestParams params)
+ 			m_sparseSemaphore = createSemaphore(vk, m_device);
+ 			allocateAndBindSparseImage(vk, m_device, vkPhysDevice, vki, sourceImageParams, m_sparseSemaphore.get(), context.getSparseQueue(), *m_allocator,
+ 				 m_sparseAllocations, mapVkFormat(sourceImageParams.format), m_source.get());
++			VK_CHECK(vk.queueWaitIdle(context.getSparseQueue())); // G5: upload below does not wait on the bind semaphore
+ 		}
+ #endif
+ 	}
+@@ -5174,6 +5185,7 @@ BlittingMipmaps::BlittingMipmaps (Context& context, TestParams params)
+ 			m_sparseSemaphore = createSemaphore(vk, m_device);
+ 			allocateAndBindSparseImage(vk, m_device, vkPhysDevice, vki, sourceImageParams, m_sparseSemaphore.get(), context.getSparseQueue(), *m_allocator,
+ 				 m_sparseAllocations, mapVkFormat(sourceImageParams.format), m_source.get());
++			VK_CHECK(vk.queueWaitIdle(context.getSparseQueue())); // G5: upload below does not wait on the bind semaphore
+ 		}
+ #endif
+ 	}
+@@ -6084,6 +6096,7 @@ ResolveImageToImage::ResolveImageToImage (Context& context, TestParams params, c
+ 			m_sparseSemaphore = createSemaphore(vk, m_device);
+ 			allocateAndBindSparseImage(vk, m_device, vkPhysDevice, vki, destinationImageParams, m_sparseSemaphore.get(), context.getSparseQueue(), *m_allocator,
+ 				 m_sparseAllocations, mapVkFormat(destinationImageParams.format), m_destination.get());
++			VK_CHECK(vk.queueWaitIdle(context.getSparseQueue())); // G5: upload below does not wait on the bind semaphore
+ 		}
+ #endif
+ 	}
+diff --git a/external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp b/external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp
+index 685d964..67068f5 100644
+--- a/external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp
++++ b/external/vulkancts/modules/vulkan/api/vktApiFeatureInfo.cpp
+@@ -214,7 +214,7 @@ bool validateFeatureLimits(VkPhysicalDeviceProperties* properties, VkPhysicalDev
+ 		{ LIMIT(viewportBoundsRange[0]),							0, 0, 0, -8192.0f, LIMIT_FORMAT_FLOAT, LIMIT_TYPE_MAX, -1, false },
+ 		{ LIMIT(viewportBoundsRange[1]),							0, 0, 0, 8191.0f, LIMIT_FORMAT_FLOAT, LIMIT_TYPE_MIN, -1, false },
+ 		{ LIMIT(viewportSubPixelBits),								0, 0, 0, 0.0f, LIMIT_FORMAT_UNSIGNED_INT, LIMIT_TYPE_MIN, -1, false },
+-		{ LIMIT(minMemoryMapAlignment),								64, 0, 0, 0.0f, LIMIT_FORMAT_UNSIGNED_INT, LIMIT_TYPE_MIN, -1, true },
++		{ DE_OFFSET_OF(VkPhysicalDeviceLimits, minMemoryMapAlignment) + (DE_ENDIANNESS == DE_BIG_ENDIAN ? sizeof(size_t) - sizeof(deUint32) : 0), "minMemoryMapAlignment", /* Local G5 test build: size_t read as deUint32 */								64, 0, 0, 0.0f, LIMIT_FORMAT_UNSIGNED_INT, LIMIT_TYPE_MIN, -1, true },
+ 		{ LIMIT(minTexelBufferOffsetAlignment),						0, 0, 1, 0.0f, LIMIT_FORMAT_DEVICE_SIZE, LIMIT_TYPE_MIN, -1, true },
+ 		{ LIMIT(minTexelBufferOffsetAlignment),						0, 0, 256, 0.0f, LIMIT_FORMAT_DEVICE_SIZE, LIMIT_TYPE_MAX, -1, true },
+ 		{ LIMIT(minUniformBufferOffsetAlignment),					0, 0, 1, 0.0f, LIMIT_FORMAT_DEVICE_SIZE, LIMIT_TYPE_MIN, -1, true },
+@@ -819,7 +819,7 @@ tcu::TestStatus validateLimits12 (Context& context)
+ 		{ PN(checkAlways),								PN(limits.viewportBoundsRange[0]),																LIM_MAX_FLOAT(-8192.0f) },
+ 		{ PN(checkAlways),								PN(limits.viewportBoundsRange[1]),																LIM_MIN_FLOAT(8191.0f) },
+ 		{ PN(checkAlways),								PN(limits.viewportSubPixelBits),																LIM_MIN_UINT32(0) },
+-		{ PN(checkAlways),								PN(limits.minMemoryMapAlignment),																LIM_MIN_UINT32(64) },
++		{ PN(checkAlways),								(const deUint8*)&limits.minMemoryMapAlignment + (DE_ENDIANNESS == DE_BIG_ENDIAN ? sizeof(size_t) - sizeof(deUint32) : 0), "limits.minMemoryMapAlignment", /* Local G5 test build */																LIM_MIN_UINT32(64) },
+ 		{ PN(checkAlways),								PN(limits.minTexelBufferOffsetAlignment),														LIM_MIN_DEVSIZE(1) },
+ 		{ PN(checkAlways),								PN(limits.minTexelBufferOffsetAlignment),														LIM_MAX_DEVSIZE(256) },
+ 		{ PN(checkAlways),								PN(limits.minUniformBufferOffsetAlignment),														LIM_MIN_DEVSIZE(1) },
+diff --git a/external/vulkancts/modules/vulkan/binding_model/vktBindingBufferDeviceAddressTests.cpp b/external/vulkancts/modules/vulkan/binding_model/vktBindingBufferDeviceAddressTests.cpp
+index c4a4b3c..bbc7cc6 100644
+--- a/external/vulkancts/modules/vulkan/binding_model/vktBindingBufferDeviceAddressTests.cpp
++++ b/external/vulkancts/modules/vulkan/binding_model/vktBindingBufferDeviceAddressTests.cpp
+@@ -351,11 +351,14 @@ void BufferAddressTestInstance::fillBuffer (const std::vector<deUint8 *>& cpuAdd
+ 
+ 	if (curDepth != m_data.depth)
+ 	{
++		// Local G5 test build: a uvec2 reference has its low word first, whatever the host's order.
++		const bool	swapWords	= DE_ENDIANNESS == DE_BIG_ENDIAN && (m_data.convertUToPtr == CONVERT_UVEC2 || m_data.convertUToPtr == CONVERT_UVEC2TOU64);
++		const auto	ref			= [swapWords](deUint64 a) { return swapWords ? (a << 32) | (a >> 32) : a; };
+ 		// c
+-		((deUint64 *)(buf+48))[0] = gpuAddrs[bufNum*3+1];
+-		((deUint64 *)(buf+48))[cStride] = gpuAddrs[bufNum*3+2];
++		((deUint64 *)(buf+48))[0] = ref(gpuAddrs[bufNum*3+1]);
++		((deUint64 *)(buf+48))[cStride] = ref(gpuAddrs[bufNum*3+2]);
+ 		// d
+-		((deUint64 *)(buf+80))[0] = gpuAddrs[bufNum*3+3];
++		((deUint64 *)(buf+80))[0] = ref(gpuAddrs[bufNum*3+3]);
+ 
+ 		fillBuffer(cpuAddrs, gpuAddrs, bufNum*3+1, curDepth+1);
+ 		fillBuffer(cpuAddrs, gpuAddrs, bufNum*3+2, curDepth+1);
+diff --git a/external/vulkancts/modules/vulkan/binding_model/vktBindingDescriptorBufferTests.cpp b/external/vulkancts/modules/vulkan/binding_model/vktBindingDescriptorBufferTests.cpp
+index 8d64335..e18688d 100644
+--- a/external/vulkancts/modules/vulkan/binding_model/vktBindingDescriptorBufferTests.cpp
++++ b/external/vulkancts/modules/vulkan/binding_model/vktBindingDescriptorBufferTests.cpp
+@@ -4384,7 +4384,11 @@ void DescriptorBufferTestInstance::initializeBinding(
+ 					const auto expectedData = getExpectedData_G8_B8R8(m_params.hash, setIndex, binding.binding, arrayIndex);
+ 
+ 					std::fill(pPlane0, pPlane0 + numPixels,   expectedData.x());
+-					std::fill(pPlane1, pPlane1 + numPixels/4, expectedData.y());
++					// B8R8 is two bytes with B first; expectedData.y() has B in its low byte.
++					const deUint8	bytesB8R8[2]	= { static_cast<deUint8>(expectedData.y() & 0xff), static_cast<deUint8>(expectedData.y() >> 8) };
++					deUint16		planeValue;
++					deMemcpy(&planeValue, bytesB8R8, sizeof(planeValue));
++					std::fill(pPlane1, pPlane1 + numPixels/4, planeValue);
+ 				}
+ 				else
+ 				{
+diff --git a/external/vulkancts/modules/vulkan/compute/vktComputeWorkgroupMemoryExplicitLayoutTests.cpp b/external/vulkancts/modules/vulkan/compute/vktComputeWorkgroupMemoryExplicitLayoutTests.cpp
+index ece7dcf..001d4c5 100644
+--- a/external/vulkancts/modules/vulkan/compute/vktComputeWorkgroupMemoryExplicitLayoutTests.cpp
++++ b/external/vulkancts/modules/vulkan/compute/vktComputeWorkgroupMemoryExplicitLayoutTests.cpp
+@@ -1136,11 +1136,14 @@ void AddPaddingTests(tcu::TestCaseGroup* group, vk::ComputePipelineConstructionT
+ 
+ 			deUint8* expected = reinterpret_cast<deUint8*>(c.expected);
+ 
++			// Local G5 test build: shared memory is GPU-private and little-endian, whatever the host's order.
++			const deUint32 byteFlip = DE_ENDIANNESS == DE_BIG_ENDIAN ? 3u : 0u;
++
+ 			c.add(TYPE_UINT8, i, "uint8_t(0xAA)");
+-			expected[i] = 0xAA;
++			expected[i ^ byteFlip] = 0xAA;
+ 
+ 			c.add(TYPE_UINT8, j, "uint8_t(0xBB)");
+-			expected[j] = 0xBB;
++			expected[j ^ byteFlip] = 0xBB;
+ 
+ 			group->addChild(new PaddingTest(group->getTestContext(), c, computePipelineConstructionType));
+ 		}
+diff --git a/external/vulkancts/modules/vulkan/image/vktImageCompressionTranscodingSupport.cpp b/external/vulkancts/modules/vulkan/image/vktImageCompressionTranscodingSupport.cpp
+index 14c6ba0..a007748 100644
+--- a/external/vulkancts/modules/vulkan/image/vktImageCompressionTranscodingSupport.cpp
++++ b/external/vulkancts/modules/vulkan/image/vktImageCompressionTranscodingSupport.cpp
+@@ -21,6 +21,7 @@
+  * \brief Compression transcoding support
+  *//*--------------------------------------------------------------------*/
+ 
++#include <algorithm>
+ #include "vktImageCompressionTranscodingSupport.hpp"
+ #include "vktImageLoadStoreUtil.hpp"
+ 
+@@ -161,6 +162,27 @@ enum BinaryCompareResult
+ const deUint32 ASTC_LDR_ERROR_COLOUR = 0xFFFF00FF;
+ const deUint32 ASTC_HDR_ERROR_COLOUR = 0x00000000;
+ 
++/* Compressed blocks are little-endian streams and the hardware presents them through an
++ * uncompressed view as little-endian numbers, while buffers copied to and from such an
++ * image hold host-order numbers. So on big endian the same block bytes have each
++ * channel reversed on the uncompressed side.
++ */
++static void swapToViewChannelOrder (deUint8* data, size_t size, VkFormat uncompressed)
++{
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	const tcu::TextureFormat	format	= mapVkFormat(uncompressed);
++	const size_t				channel	= (size_t)tcu::getChannelSize(format.type);
++	if (channel < 2)
++		return;
++	for (size_t ndx = 0; ndx + channel <= size; ndx += channel)
++		std::reverse(data + ndx, data + ndx + channel);
++#else
++	DE_UNREF(data);
++	DE_UNREF(size);
++	DE_UNREF(uncompressed);
++#endif
++}
++
+ static BinaryCompareResult BinaryCompare(const void				*reference,
+ 										 const void				*result,
+ 										 VkDeviceSize			sizeInBytes,
+@@ -731,6 +753,8 @@ void BasicComputeTestInstance::copyDataToImage (const VkCommandPool&	cmdPool,
+ 	{
+ 		const Allocation& alloc = imageBuffer.getAllocation();
+ 		deMemcpy(alloc.getHostPtr(), &m_data[0], m_data.size());
++		if (!isCompressed)
++			swapToViewChannelOrder(static_cast<deUint8*>(alloc.getHostPtr()), m_data.size(), m_parameters.formatUncompressed);
+ 		flushAlloc(vk, device, alloc);
+ 	}
+ 
+@@ -956,6 +980,7 @@ bool BasicComputeTestInstance::copyResultAndCompare (const VkCommandPool&	cmdPoo
+ 
+ 	const Allocation& allocResult = imageBufferResult.getAllocation();
+ 	invalidateAlloc(vk, device, allocResult);
++	swapToViewChannelOrder(static_cast<deUint8*>(allocResult.getHostPtr()), static_cast<size_t>(imageResultSize), m_parameters.formatUncompressed);
+ 	if (deMemCmp((const void *)allocResult.getHostPtr(), (const void *)&m_data[static_cast<size_t>(offset)], static_cast<size_t>(imageResultSize)) == 0ull)
+ 		return true;
+ 	return false;
+@@ -1304,6 +1329,23 @@ bool BasicComputeTestInstance::decompressImage (const VkCommandPool&	cmdPool,
+ 			}
+ 
+ 			vk.cmdCopyImageToBuffer(cmdBuffer, uncompressed, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, transferBuffer.get(), 1u, &compressedCopyRegion);
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++			/* The buffer now holds host-order numbers; a block image needs the stream. */
++			{
++				const VkBufferMemoryBarrier toHost = makeBufferMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT,
++																			 transferBuffer.get(), 0ull, bufferSizeComp);
++				vk.cmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
++					(VkDependencyFlags)0, 0, (const VkMemoryBarrier*)DE_NULL, 1u, &toHost, 0u, (const VkImageMemoryBarrier*)DE_NULL);
++				endCommandBuffer(vk, cmdBuffer);
++				submitCommandsAndWait(vk, device, queue, cmdBuffer);
++				m_context.resetCommandPoolForVKSC(device, cmdPool);
++				const Allocation& transferAlloc = transferBuffer.getAllocation();
++				invalidateAlloc(vk, device, transferAlloc);
++				swapToViewChannelOrder(static_cast<deUint8*>(transferAlloc.getHostPtr()), static_cast<size_t>(bufferSizeComp), m_parameters.formatUncompressed);
++				flushAlloc(vk, device, transferAlloc);
++				beginCommandBuffer(vk, cmdBuffer);
++			}
++#endif
+ 
+ 			{
+ 				const VkBufferMemoryBarrier		postCopyBufferBarriers	= makeBufferMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+@@ -1912,6 +1954,7 @@ void GraphicsAttachmentsTestInstance::transcodeRead (const VkCommandPool&				cmd
+ 			const Allocation& dstImageBufferAlloc = dstImageBuffer->getAllocation();
+ 			invalidateAlloc(vk, device, dstImageBufferAlloc);
+ 			deMemcpy(&m_dstData[levelNdx][layerNdx]->at(0), dstImageBufferAlloc.getHostPtr(), dstImageSizeInBytes);
++			swapToViewChannelOrder(&m_dstData[levelNdx][layerNdx]->at(0), dstImageSizeInBytes, m_parameters.formatUncompressed);
+ 		}
+ 	}
+ 
+@@ -1994,6 +2037,7 @@ void GraphicsAttachmentsTestInstance::transcodeWrite (const VkCommandPool&				cm
+ 			// Upload source image data
+ 			const Allocation& alloc = srcImageBuffer->getAllocation();
+ 			deMemcpy(alloc.getHostPtr(), &m_srcData[levelNdx][layerNdx]->at(0), srcImageSizeInBytes);
++			swapToViewChannelOrder(static_cast<deUint8*>(alloc.getHostPtr()), srcImageSizeInBytes, m_parameters.formatUncompressed);
+ 			flushAlloc(vk, device, alloc);
+ 
+ 			beginCommandBuffer(vk, *cmdBuffer);
+@@ -2498,6 +2542,7 @@ void GraphicsTextureTestInstance::transcodeRead (const VkCommandPool&				cmdPool
+ 			const Allocation& dstImageBufferAlloc = dstImageBuffer->getAllocation();
+ 			invalidateAlloc(vk, device, dstImageBufferAlloc);
+ 			deMemcpy(&m_dstData[levelNdx][layerNdx]->at(0), dstImageBufferAlloc.getHostPtr(), dstImageSizeInBytes);
++			swapToViewChannelOrder(&m_dstData[levelNdx][layerNdx]->at(0), dstImageSizeInBytes, m_parameters.formatUncompressed);
+ 		}
+ 	}
+ 
+@@ -2586,6 +2631,7 @@ void GraphicsTextureTestInstance::transcodeWrite (const VkCommandPool&				cmdPoo
+ 			// Upload source image data
+ 			const Allocation& alloc = srcImageBuffer->getAllocation();
+ 			deMemcpy(alloc.getHostPtr(), &m_srcData[levelNdx][layerNdx]->at(0), srcImageSizeInBytes);
++			swapToViewChannelOrder(static_cast<deUint8*>(alloc.getHostPtr()), srcImageSizeInBytes, m_parameters.formatUncompressed);
+ 			flushAlloc(vk, device, alloc);
+ 
+ 			beginCommandBuffer(vk, *cmdBuffer);
+diff --git a/external/vulkancts/modules/vulkan/image/vktImageMutableTests.cpp b/external/vulkancts/modules/vulkan/image/vktImageMutableTests.cpp
+index b94abcd..27e4ae1 100644
+--- a/external/vulkancts/modules/vulkan/image/vktImageMutableTests.cpp
++++ b/external/vulkancts/modules/vulkan/image/vktImageMutableTests.cpp
+@@ -121,6 +121,18 @@ static const deUint32 COLOR_TABLE_SIZE = 4;
+ // Reference color values for float color rendering. Values have been chosen
+ // so that when the bit patterns are reinterpreted as a 16-bit float, we do not
+ // run into NaN / inf / denorm values.
++// The values above only avoid NaN / denorm when the first byte is the low byte. On a
++// big-endian host it is the high byte: 1.00 and 0.00 give 0x7Fxx (NaN) and 0x00xx (denorm),
++// and 0.20 encoded as sRGB gives 0x7Cxx (NaN).
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++static const Vec4	COLOR_TABLE_FLOAT[COLOR_TABLE_SIZE]	=
++{
++	Vec4(0.05f, 0.40f, 0.80f, 0.10f),
++	Vec4(0.50f, 0.10f, 0.90f, 0.20f),
++	Vec4(0.18f, 0.60f, 0.95f, 0.30f),
++	Vec4(0.30f, 0.70f, 0.05f, 0.40f),
++};
++#else
+ static const Vec4	COLOR_TABLE_FLOAT[COLOR_TABLE_SIZE]	=
+ {
+ 	Vec4(0.00f, 0.40f, 0.80f, 0.10f),
+@@ -128,6 +140,7 @@ static const Vec4	COLOR_TABLE_FLOAT[COLOR_TABLE_SIZE]	=
+ 	Vec4(0.20f, 0.60f, 1.00f, 0.30f),
+ 	Vec4(0.30f, 0.70f, 0.00f, 0.40f),
+ };
++#endif
+ 
+ // Reference color values for integer color rendering. We avoid negative
+ // values (even for SINT formats) to avoid the situation where sign extension
+diff --git a/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp b/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp
+index 8d4b7c3..cdfa194 100644
+--- a/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp
++++ b/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp
+@@ -598,6 +598,9 @@ std::string getShaderImageFormatQualifier (const tcu::TextureFormat& format)
+ 			case tcu::TextureFormat::RG:	orderPart = "rg";	break;
+ 			case tcu::TextureFormat::RGB:	orderPart = "rgb";	break;
+ 			case tcu::TextureFormat::RGBA:	orderPart = "rgba";	break;
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++			case tcu::TextureFormat::ABGR:	orderPart = "rgba";	break;
++#endif
+ 			case tcu::TextureFormat::sRGBA:	orderPart = "rgba";	break;
+ 
+ 			default:
+@@ -828,12 +831,15 @@ bool isComponentSwizzled (const vk::VkFormat format)
+ {
+ 	const tcu::TextureFormat	textureFormat	= mapVkFormat(format);
+ 
+-	DE_STATIC_ASSERT(tcu::TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(tcu::TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	switch (textureFormat.order)
+ 	{
+ 		case tcu::TextureFormat::ARGB:
++#if (DE_ENDIANNESS != DE_BIG_ENDIAN)
++		// Local G5 test build: on big endian this is a8b8g8r8 memory order, not a swizzle.
+ 		case tcu::TextureFormat::ABGR:
++#endif
+ 		case tcu::TextureFormat::BGR:
+ 		case tcu::TextureFormat::BGRA:
+ 		case tcu::TextureFormat::sBGR:
+@@ -848,7 +854,7 @@ bool isComponentSwizzled (const vk::VkFormat format)
+ int getNumUsedChannels (const vk::VkFormat format)
+ {
+ 	// make sure this function will be checked if type table is updated
+-	DE_STATIC_ASSERT(tcu::TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(tcu::TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	const tcu::TextureFormat	textureFormat	= mapVkFormat(format);
+ 
+diff --git a/external/vulkancts/modules/vulkan/memory/vktMemoryPipelineBarrierTests.cpp b/external/vulkancts/modules/vulkan/memory/vktMemoryPipelineBarrierTests.cpp
+index cbb74de..2c3cd78 100644
+--- a/external/vulkancts/modules/vulkan/memory/vktMemoryPipelineBarrierTests.cpp
++++ b/external/vulkancts/modules/vulkan/memory/vktMemoryPipelineBarrierTests.cpp
+@@ -733,6 +733,22 @@ bool ReferenceMemory::isDefined (size_t pos) const
+ 	return (m_defined[pos / 64] & (0x1ull << (pos % 64))) != 0;
+ }
+ 
++// Local G5 test build: the address of the byte holding a word's bits, counted from the low end.
++static size_t hostWordByte (size_t pos)
++{
++	return DE_ENDIANNESS == DE_BIG_ENDIAN ? pos ^ 3u : pos;
++}
++
++// Local G5 test build: shaders read host-order words from memory the test wrote as bytes.
++static deUint32 loadReferenceWord (const ReferenceMemory& reference, size_t pos)
++{
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	return ((deUint32)reference.get(pos) << 24u) | ((deUint32)reference.get(pos + 1) << 16u) | ((deUint32)reference.get(pos + 2) << 8u) | (deUint32)reference.get(pos + 3);
++#else
++	return (deUint32)reference.get(pos) | ((deUint32)reference.get(pos + 1) << 8u) | ((deUint32)reference.get(pos + 2) << 16u) | ((deUint32)reference.get(pos + 3) << 24u);
++#endif
++}
++
+ class Memory
+ {
+ public:
+@@ -4790,8 +4806,10 @@ void RenderIndexBuffer::verify (VerifyRenderPassContext& context, size_t)
+ {
+ 	for (size_t pos = 0; pos < (size_t)m_bufferSize / 2; pos++)
+ 	{
+-		const deUint8 x  = context.getReference().get(pos * 2);
+-		const deUint8 y  = context.getReference().get((pos * 2) + 1);
++		// Local G5 test build: indices are host-order 16-bit values.
++		const size_t	byteFlip	= DE_ENDIANNESS == DE_BIG_ENDIAN ? 1u : 0u;
++		const deUint8	x			= context.getReference().get((pos * 2) ^ byteFlip);
++		const deUint8	y			= context.getReference().get(((pos * 2) + 1) ^ byteFlip);
+ 
+ 		context.getReferenceTarget().getAccess().setPixel(Vec4(1.0f, 1.0f, 1.0f, 1.0f), x, y);
+ 	}
+@@ -5052,8 +5070,8 @@ void RenderVertexUniformBuffer::verify (VerifyRenderPassContext& context, size_t
+ 
+ 		for (size_t pos = 0; pos < count; pos++)
+ 		{
+-			const deUint8 x  = context.getReference().get(offset + pos * 2);
+-			const deUint8 y  = context.getReference().get(offset + (pos * 2) + 1);
++			const deUint8 x  = context.getReference().get(hostWordByte(offset + pos * 2));
++			const deUint8 y  = context.getReference().get(hostWordByte(offset + (pos * 2) + 1));
+ 
+ 			context.getReferenceTarget().getAccess().setPixel(Vec4(1.0f, 1.0f, 1.0f, 1.0f), x, y);
+ 		}
+@@ -5254,8 +5272,8 @@ void RenderVertexUniformTexelBuffer::verify (VerifyRenderPassContext& context, s
+ 
+ 		for (size_t pos = 0; pos < (size_t)count; pos++)
+ 		{
+-			const deUint8 x  = context.getReference().get(offset + pos * 2);
+-			const deUint8 y  = context.getReference().get(offset + (pos * 2) + 1);
++			const deUint8 x  = context.getReference().get(hostWordByte(offset + pos * 2));
++			const deUint8 y  = context.getReference().get(hostWordByte(offset + (pos * 2) + 1));
+ 
+ 			context.getReferenceTarget().getAccess().setPixel(Vec4(1.0f, 1.0f, 1.0f, 1.0f), x, y);
+ 		}
+@@ -5417,8 +5435,8 @@ void RenderVertexStorageBuffer::verify (VerifyRenderPassContext& context, size_t
+ 
+ 		for (size_t pos = 0; pos < size / 2; pos++)
+ 		{
+-			const deUint8 x  = context.getReference().get(offset + pos * 2);
+-			const deUint8 y  = context.getReference().get(offset + (pos * 2) + 1);
++			const deUint8 x  = context.getReference().get(hostWordByte(offset + pos * 2));
++			const deUint8 y  = context.getReference().get(hostWordByte(offset + (pos * 2) + 1));
+ 
+ 			context.getReferenceTarget().getAccess().setPixel(Vec4(1.0f, 1.0f, 1.0f, 1.0f), x, y);
+ 		}
+@@ -5612,8 +5630,8 @@ void RenderVertexStorageTexelBuffer::verify (VerifyRenderPassContext& context, s
+ 
+ 		for (size_t pos = 0; pos < (size_t)count; pos++)
+ 		{
+-			const deUint8 x = context.getReference().get(offset + pos * 2);
+-			const deUint8 y = context.getReference().get(offset + (pos * 2) + 1);
++			const deUint8 x = context.getReference().get(hostWordByte(offset + pos * 2));
++			const deUint8 y = context.getReference().get(hostWordByte(offset + (pos * 2) + 1));
+ 
+ 			context.getReferenceTarget().getAccess().setPixel(Vec4(1.0f, 1.0f, 1.0f, 1.0f), x, y);
+ 		}
+@@ -6183,10 +6201,7 @@ void RenderFragmentUniformBuffer::verify (VerifyRenderPassContext& context, size
+ 				{
+ 					// in shader UBO has up to 64 items of uvec4, each uvec4 contains 16 values
+ 					size_t index = offset + size_t((value % count) * 16u) + size_t((value % 4u) * 4u);
+-					value	= (((deUint32)context.getReference().get(index + 0)))
+-							| (((deUint32)context.getReference().get(index + 1)) << 8u)
+-							| (((deUint32)context.getReference().get(index + 2)) << 16u)
+-							| (((deUint32)context.getReference().get(index + 3)) << 24u);
++					value	= loadReferenceWord(context.getReference(), index);
+ 				}
+ 				const UVec4	vec	((value >>  0u) & 0xFFu,
+ 								 (value >>  8u) & 0xFFu,
+@@ -6378,10 +6393,7 @@ void RenderFragmentStorageBuffer::verify (VerifyRenderPassContext& context, size
+ 
+ 		for (deUint32 i = 0; i < valuesPerPixel; i++)
+ 		{
+-			value	= (((deUint32)context.getReference().get((size_t)(value % (m_bufferSize / sizeof(deUint32))) * 4 + 0)) << 0u)
+-					| (((deUint32)context.getReference().get((size_t)(value % (m_bufferSize / sizeof(deUint32))) * 4 + 1)) << 8u)
+-					| (((deUint32)context.getReference().get((size_t)(value % (m_bufferSize / sizeof(deUint32))) * 4 + 2)) << 16u)
+-					| (((deUint32)context.getReference().get((size_t)(value % (m_bufferSize / sizeof(deUint32))) * 4 + 3)) << 24u);
++			value	= loadReferenceWord(context.getReference(), (size_t)(value % (m_bufferSize / sizeof(deUint32))) * 4);
+ 
+ 		}
+ 		const UVec4	vec	((value >>  0u) & 0xFFu,
+@@ -6614,10 +6626,7 @@ void RenderFragmentUniformTexelBuffer::verify (VerifyRenderPassContext& context,
+ 
+ 				for (deUint32 i = 0; i < valuesPerPixel; i++)
+ 				{
+-					value	=  ((deUint32)context.getReference().get(offset + (value % count) * 4 + 0))
+-							| (((deUint32)context.getReference().get(offset + (value % count) * 4 + 1)) << 8u)
+-							| (((deUint32)context.getReference().get(offset + (value % count) * 4 + 2)) << 16u)
+-							| (((deUint32)context.getReference().get(offset + (value % count) * 4 + 3)) << 24u);
++					value	=  loadReferenceWord(context.getReference(), offset + (value % count) * 4);
+ 
+ 				}
+ 				const UVec4	vec	((value >>  0u) & 0xFFu,
+@@ -6856,10 +6865,7 @@ void RenderFragmentStorageTexelBuffer::verify (VerifyRenderPassContext& context,
+ 
+ 				for (deUint32 i = 0; i < valuesPerPixel; i++)
+ 				{
+-					value	= ((deUint32)context.getReference().get( offset + (value % count) * 4 + 0))
+-							| (((deUint32)context.getReference().get(offset + (value % count) * 4 + 1)) << 8u)
+-							| (((deUint32)context.getReference().get(offset + (value % count) * 4 + 2)) << 16u)
+-							| (((deUint32)context.getReference().get(offset + (value % count) * 4 + 3)) << 24u);
++					value	= loadReferenceWord(context.getReference(), offset + (value % count) * 4);
+ 
+ 				}
+ 				const UVec4	vec	((value >>  0u) & 0xFFu,
+diff --git a/external/vulkancts/modules/vulkan/pipeline/vktPipelineSpecConstantTests.cpp b/external/vulkancts/modules/vulkan/pipeline/vktPipelineSpecConstantTests.cpp
+index 589d00b..2aa44e4 100644
+--- a/external/vulkancts/modules/vulkan/pipeline/vktPipelineSpecConstantTests.cpp
++++ b/external/vulkancts/modules/vulkan/pipeline/vktPipelineSpecConstantTests.cpp
+@@ -87,7 +87,7 @@ private:
+ 	void clear (void) { m_data = 0; }
+ };
+ 
+-inline GenericValue makeValueBool32	 (const bool a)			{ return GenericValue(&a, sizeof(a)); }
++inline GenericValue makeValueBool32	 (const bool a)			{ const deUint32 v = a ? 1u : 0u; return GenericValue(&v, sizeof(v)); } // a VkBool32 is four host-order bytes
+ inline GenericValue makeValueInt8    (const deInt8 a)		{ return GenericValue(&a, sizeof(a)); }
+ inline GenericValue makeValueUint8   (const deUint8 a)		{ return GenericValue(&a, sizeof(a)); }
+ inline GenericValue makeValueInt16   (const deInt16 a)		{ return GenericValue(&a, sizeof(a)); }
+diff --git a/external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp b/external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp
+index e30f8fa..c0b1e5a 100644
+--- a/external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp
++++ b/external/vulkancts/modules/vulkan/renderpass/vktRenderPassTests.cpp
+@@ -475,7 +475,7 @@ VkImageAspectFlags getImageAspectFlags (VkFormat vkFormat)
+ {
+ 	const tcu::TextureFormat format = mapVkFormat(vkFormat);
+ 
+-	DE_STATIC_ASSERT(tcu::TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(tcu::TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	switch (format.order)
+ 	{
+@@ -1598,7 +1598,7 @@ void uploadBufferData (const DeviceInterface&	vk,
+ 
+ VkImageAspectFlagBits getPrimaryImageAspect (tcu::TextureFormat::ChannelOrder order)
+ {
+-	DE_STATIC_ASSERT(tcu::TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(tcu::TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	switch (order)
+ 	{
+diff --git a/external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp b/external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp
+index c6c78d3..fe4d527 100644
+--- a/external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp
++++ b/external/vulkancts/modules/vulkan/spirv_assembly/vktSpvAsmInstructionTests.cpp
+@@ -1691,12 +1691,21 @@ do { \
+ 								"Date: 2017/09/21"
+ 						};
+ 				size_t			paternNdx		= 0u;
++				// SPIR-V string literals are little endian within each word, whatever the host order.
++				std::vector<deUint8> littleEndianWords(binary.getBinary(), binary.getBinary() + binary.getSize());
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++				for (size_t wordNdx = 0u; wordNdx + 3u < littleEndianWords.size(); wordNdx += 4u)
++				{
++					std::swap(littleEndianWords[wordNdx + 0u], littleEndianWords[wordNdx + 3u]);
++					std::swap(littleEndianWords[wordNdx + 1u], littleEndianWords[wordNdx + 2u]);
++				}
++#endif
+ 
+ 				for (size_t ndx = 0u; ndx < binary.getSize(); ++ndx)
+ 				{
+ 					if (false == paternsCheck[paternNdx] &&
+-						patersns[paternNdx][0] == static_cast<char>(binary.getBinary()[ndx]) &&
+-						deMemoryEqual((const char*)&binary.getBinary()[ndx], &patersns[paternNdx][0], patersns[paternNdx].length()))
++						patersns[paternNdx][0] == static_cast<char>(littleEndianWords[ndx]) &&
++						deMemoryEqual((const char*)&littleEndianWords[ndx], &patersns[paternNdx][0], patersns[paternNdx].length()))
+ 					{
+ 						paternsCheck[paternNdx]= true;
+ 						paternNdx++;
+diff --git a/external/vulkancts/modules/vulkan/texture/vktSampleVerifierUtil.cpp b/external/vulkancts/modules/vulkan/texture/vktSampleVerifierUtil.cpp
+index 364513b..d317f16 100644
+--- a/external/vulkancts/modules/vulkan/texture/vktSampleVerifierUtil.cpp
++++ b/external/vulkancts/modules/vulkan/texture/vktSampleVerifierUtil.cpp
+@@ -768,7 +768,12 @@ deUint64 readChannel (const void* ptr,
+ 
+ 	for (int byteNdx = 0; byteNdx < numBytes; ++byteNdx)
+ 	{
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++		// Reference texels are stored in host order.
++		result = (result << 8U) | (deUint64) (cPtr[byteNdx]);
++#else
+ 		result = (result << 8U) | (deUint64) (cPtr[numBytes - byteNdx - 1]);
++#endif
+ 	}
+ 
+ 	return result;
+diff --git a/external/vulkancts/modules/vulkan/ycbcr/vktYCbCrUtil.cpp b/external/vulkancts/modules/vulkan/ycbcr/vktYCbCrUtil.cpp
+index 9ce8aba..7b58ab4 100644
+--- a/external/vulkancts/modules/vulkan/ycbcr/vktYCbCrUtil.cpp
++++ b/external/vulkancts/modules/vulkan/ycbcr/vktYCbCrUtil.cpp
+@@ -809,9 +809,56 @@ ChannelAccess::ChannelAccess (tcu::TextureChannelClass	channelClass,
+ 	, m_bitPitch		(bitPitch)
+ 	, m_data			((deUint8*)data + (bitOffset / 8))
+ 	, m_bitOffset		(bitOffset % 8)
++	, m_base			((deUint8*)data)
++	, m_baseBitOffset	(bitOffset)
+ {
+ }
+ 
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++namespace
++{
++// Local G5 test build: bit offsets describe little-endian numeric containers. Find the
++// host-order container holding a channel: its own element for array formats, a 16-bit
++// word for X6/X4 channels, and the whole pixel for packed formats.
++void locateContainer (deUint32 bits, deUint32 channelSize, deUint32 pixelBits, deUint32& containerBits, deUint32& byteOffset, deUint32& shift)
++{
++	containerBits	= (channelSize == 8u || channelSize == 16u || channelSize == 32u)	? channelSize
++					: (channelSize == 10u || channelSize == 12u)						? 16u
++					: pixelBits;
++	byteOffset		= (bits / containerBits) * (containerBits / 8u);
++	shift			= bits % containerBits;
++}
++
++deUint32 readContainer (const deUint8* ptr, deUint32 containerBits)
++{
++	if (containerBits == 8u)
++		return *ptr;
++	if (containerBits == 16u)
++	{
++		deUint16 v;
++		deMemcpy(&v, ptr, sizeof(v));
++		return v;
++	}
++	deUint32 v;
++	deMemcpy(&v, ptr, sizeof(v));
++	return v;
++}
++
++void writeContainer (deUint8* ptr, deUint32 containerBits, deUint32 value)
++{
++	if (containerBits == 8u)
++		*ptr = (deUint8)value;
++	else if (containerBits == 16u)
++	{
++		const deUint16 v = (deUint16)value;
++		deMemcpy(ptr, &v, sizeof(v));
++	}
++	else
++		deMemcpy(ptr, &value, sizeof(value));
++}
++} // anonymous
++#endif
++
+ deUint32 ChannelAccess::getChannelUint (const tcu::IVec3& pos) const
+ {
+ 	DE_ASSERT(pos[0] < m_size[0]);
+@@ -825,6 +872,14 @@ deUint32 ChannelAccess::getChannelUint (const tcu::IVec3& pos) const
+ 	const deUint32			offset		= bitOffset % 8;
+ 	deUint32				bits		= 0u;
+ 
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	{
++		deUint32 containerBits, byteOffset, shift;
++		locateContainer(m_baseBitOffset + tcu::dot(m_bitPitch, pos), m_channelSize, m_bitPitch[0], containerBits, byteOffset, shift);
++		return (readContainer(m_base + byteOffset, containerBits) >> shift) & mask;
++	}
++#endif
++
+ 	deMemcpy(&bits, firstByte, byteCount);
+ 
+ 	return (bits >> offset) & mask;
+@@ -845,6 +900,16 @@ void ChannelAccess::setChannel (const tcu::IVec3& pos, deUint32 x)
+ 	const deUint32	bits		= (x & mask) << offset;
+ 	deUint32		oldBits		= 0;
+ 
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	{
++		deUint32 containerBits, byteOffset, shift;
++		locateContainer(m_baseBitOffset + tcu::dot(m_bitPitch, pos), m_channelSize, m_bitPitch[0], containerBits, byteOffset, shift);
++		const deUint32 old = readContainer(m_base + byteOffset, containerBits);
++		writeContainer(m_base + byteOffset, containerBits, ((x & mask) << shift) | (old & ~(mask << shift)));
++		return;
++	}
++#endif
++
+ 	deMemcpy(&oldBits, firstByte, byteCount);
+ 
+ 	{
+diff --git a/external/vulkancts/modules/vulkan/ycbcr/vktYCbCrUtil.hpp b/external/vulkancts/modules/vulkan/ycbcr/vktYCbCrUtil.hpp
+index 780dd83..aa7c455 100644
+--- a/external/vulkancts/modules/vulkan/ycbcr/vktYCbCrUtil.hpp
++++ b/external/vulkancts/modules/vulkan/ycbcr/vktYCbCrUtil.hpp
+@@ -166,6 +166,8 @@ private:
+ 	const tcu::IVec3				m_bitPitch;
+ 	void* const						m_data;
+ 	const deInt32					m_bitOffset;
++	deUint8*					m_base;		// Local G5 test build
++	deUint32					m_baseBitOffset;
+ };
+ 
+ ChannelAccess					getChannelAccess			(ycbcr::MultiPlaneImageData&			data,
+diff --git a/framework/common/tcuCompressedTexture.cpp b/framework/common/tcuCompressedTexture.cpp
+index 3bb96dc..51d8b8b 100644
+--- a/framework/common/tcuCompressedTexture.cpp
++++ b/framework/common/tcuCompressedTexture.cpp
+@@ -1396,6 +1396,22 @@ inline deUint64 get64BitBlockLE (const deUint8* src, int blockNdx)
+ 	return block;
+ }
+ 
++// Local G5 test build: compressed blocks are little-endian streams, and the 32-bit
++// values below hold R in bits 0-7 of a byte-ordered RGBA8 pixel.
++inline deUint16 loadBcLE16 (const deUint8* src, int ndx)
++{
++	return (deUint16)(src[ndx*2] | (src[ndx*2 + 1] << 8));
++}
++
++inline deUint32 storeBcRgba (deUint32 value)
++{
++#if (DE_ENDIANNESS == DE_BIG_ENDIAN)
++	return (value >> 24) | ((value >> 8) & 0xff00u) | ((value << 8) & 0xff0000u) | (value << 24);
++#else
++	return value;
++#endif
++}
++
+ inline deUint32 getBits128 (deUint64 low, deUint64 high, deUint32 first, deUint32 last)
+ {
+ 	const deUint64	d[2]	= { low, high };
+@@ -1537,8 +1553,8 @@ void decompressBc1 (const PixelBufferAccess& dst, const deUint8* src, bool hasAl
+ 	deUint8* const			dstPtr			= (deUint8*)dst.getDataPtr();
+ 	const deUint32			dstRowPitch		= dst.getRowPitch();
+ 	const deUint32			dstPixelSize	= 4;
+-	const deUint16			color0_16		= ((deUint16*)src)[0];
+-	const deUint16			color1_16		= ((deUint16*)src)[1];
++	const deUint16			color0_16		= loadBcLE16(src, 0);
++	const deUint16			color1_16		= loadBcLE16(src, 1);
+ 	const deUint32			color0			= bgr16torgba32(color0_16);
+ 	const deUint32			color1			= bgr16torgba32(color1_16);
+ 	const deUint8* const	indices8		= &src[4];
+@@ -1578,7 +1594,7 @@ void decompressBc1 (const PixelBufferAccess& dst, const deUint8* src, bool hasAl
+ 		for (deUint32 x = 0; x < (deUint32)BC_BLOCK_WIDTH; x++)
+ 		{
+ 			deUint32* const dstPixel = (deUint32*)(dstPtr + y * dstRowPitch + x * dstPixelSize);
+-			*dstPixel = colors[indices[y * BC_BLOCK_WIDTH + x]];
++			*dstPixel = storeBcRgba(colors[indices[y * BC_BLOCK_WIDTH + x]]);
+ 		}
+ 	}
+ }
+@@ -1590,8 +1606,8 @@ void decompressBc2 (const PixelBufferAccess& dst, const deUint8* src)
+ 	deUint8* const			dstPtr			= (deUint8*)dst.getDataPtr();
+ 	const deUint32			dstRowPitch		= dst.getRowPitch();
+ 	const deUint32			dstPixelSize	= 4;
+-	const deUint16			color0_16		= ((deUint16*)src)[4];
+-	const deUint16			color1_16		= ((deUint16*)src)[5];
++	const deUint16			color0_16		= loadBcLE16(src, 4);
++	const deUint16			color1_16		= loadBcLE16(src, 5);
+ 	const deUint32			color0			= bgr16torgba32(color0_16);
+ 	const deUint32			color1			= bgr16torgba32(color1_16);
+ 	const deUint8* const	indices8		= &src[12];
+@@ -1650,7 +1666,7 @@ void decompressBc2 (const PixelBufferAccess& dst, const deUint8* src)
+ 		for (deUint32 x = 0; x < (deUint32)BC_BLOCK_WIDTH; x++)
+ 		{
+ 			deUint32* const dstPixel = (deUint32*)(dstPtr + y * dstRowPitch + x * dstPixelSize);
+-			*dstPixel = (colors[indices[y * BC_BLOCK_WIDTH + x]] & 0x00ffffff) | alphas[y * BC_BLOCK_WIDTH + x];
++			*dstPixel = storeBcRgba((colors[indices[y * BC_BLOCK_WIDTH + x]] & 0x00ffffff) | alphas[y * BC_BLOCK_WIDTH + x]);
+ 		}
+ 	}
+ }
+@@ -1664,8 +1680,8 @@ void decompressBc3 (const PixelBufferAccess& dst, const deUint8* src)
+ 	const deUint32			dstPixelSize		= 4;
+ 	const deUint8			alpha0				= src[0];
+ 	const deUint8			alpha1				= src[1];
+-	const deUint16			color0_16			= ((deUint16*)src)[4];
+-	const deUint16			color1_16			= ((deUint16*)src)[5];
++	const deUint16			color0_16			= loadBcLE16(src, 4);
++	const deUint16			color1_16			= loadBcLE16(src, 5);
+ 	const deUint32			color0				= bgr16torgba32(color0_16);
+ 	const deUint32			color1				= bgr16torgba32(color1_16);
+ 	const deUint8* const	indices8			= &src[12];
+@@ -1741,7 +1757,7 @@ void decompressBc3 (const PixelBufferAccess& dst, const deUint8* src)
+ 		for (deUint32 x = 0; x < (deUint32)BC_BLOCK_WIDTH; x++)
+ 		{
+ 			deUint32* const	dstPixel = (deUint32*)(dstPtr + y * dstRowPitch + x * dstPixelSize);
+-			*dstPixel = (colors[indices[y * BC_BLOCK_WIDTH + x]] & 0x00ffffff) | alphas[alphaIndices[y * BC_BLOCK_WIDTH + x]];
++			*dstPixel = storeBcRgba((colors[indices[y * BC_BLOCK_WIDTH + x]] & 0x00ffffff) | alphas[alphaIndices[y * BC_BLOCK_WIDTH + x]]);
+ 		}
+ 	}
+ }
+@@ -1871,8 +1887,8 @@ void decompressBc6H (const PixelBufferAccess& dst, const deUint8* src, bool hasS
+ 	deUint32				deltaBitsR		= 0;
+ 	deUint32				deltaBitsG		= 0;
+ 	deUint32				deltaBitsB		= 0;
+-	const deUint64			low				= ((deUint64*)src)[0];
+-	const deUint64			high			= ((deUint64*)src)[1];
++	const deUint64			low				= get64BitBlockLE(src, 0);
++	const deUint64			high			= get64BitBlockLE(src, 1);
+ 	const deUint32			d				= mode < 10 ? getBits128(low, high, 77, 81) : 0;
+ 	const deUint32			numRegions		= mode > 9 ? 1 : 2;
+ 	const deUint32			numEndpoints	= numRegions * 2;
+@@ -2277,8 +2293,8 @@ void decompressBc7 (const PixelBufferAccess& dst, const deUint8* src)
+ 	const deUint32			dstRowPitch			= dst.getRowPitch();
+ 	const deUint32			dstPixelSize		= 4;
+ 
+-	const deUint64			low					= ((deUint64*)src)[0];
+-	const deUint64			high				= ((deUint64*)src)[1];
++	const deUint64			low					= get64BitBlockLE(src, 0);
++	const deUint64			high				= get64BitBlockLE(src, 1);
+ 	const deInt32			mode				= extractModeBc7(src[0]);
+ 	deUint32				numSubsets			= 1;
+ 	deUint32				offset				= mode + 1;
+@@ -2399,7 +2415,7 @@ void decompressBc7 (const PixelBufferAccess& dst, const deUint8* src)
+ 
+ 			if (mode == -1)
+ 			{
+-				*dstPixel = 0;
++				*dstPixel = storeBcRgba(0);
+ 				continue;
+ 			}
+ 
+@@ -2444,15 +2460,15 @@ void decompressBc7 (const PixelBufferAccess& dst, const deUint8* src)
+ 				if ((mode == 4 || mode == 5) && rotation != 0)
+ 				{
+ 					if (rotation == 1)
+-						*dstPixel = a | (g << 8) | (b << 16) | (r << 24);
++						*dstPixel = storeBcRgba(a | (g << 8) | (b << 16) | (r << 24));
+ 					else if (rotation == 2)
+-						*dstPixel = r | (a << 8) | (b << 16) | (g << 24);
++						*dstPixel = storeBcRgba(r | (a << 8) | (b << 16) | (g << 24));
+ 					else
+-						*dstPixel = r | (g << 8) | (a << 16) | (b << 24);
++						*dstPixel = storeBcRgba(r | (g << 8) | (a << 16) | (b << 24));
+ 				}
+ 				else
+ 				{
+-					*dstPixel = r | (g << 8) | (b << 16) | (a << 24);
++					*dstPixel = storeBcRgba(r | (g << 8) | (b << 16) | (a << 24));
+ 				}
+ 			}
+ 		}
+diff --git a/framework/common/tcuImageIO.cpp b/framework/common/tcuImageIO.cpp
+index 6a2b2a3..1b292f4 100644
+--- a/framework/common/tcuImageIO.cpp
++++ b/framework/common/tcuImageIO.cpp
+@@ -212,9 +212,9 @@ enum PkmImageFormat
+ 
+ static inline deUint16 readBigEndianShort (tcu::Resource* resource)
+ {
+-	deUint16 val;
+-	resource->read((deUint8*)&val, sizeof(val));
+-	return (deUint16)(((val >> 8) & 0xFF) | ((val << 8) & 0xFF00));
++	deUint8 val[2];
++	resource->read(val, sizeof(val));
++	return (deUint16)((val[0] << 8) | val[1]);
+ }
+ 
+ /*--------------------------------------------------------------------*//*!
+diff --git a/framework/common/tcuTexture.cpp b/framework/common/tcuTexture.cpp
+index 461a958..4986da4 100644
+--- a/framework/common/tcuTexture.cpp
++++ b/framework/common/tcuTexture.cpp
+@@ -596,7 +596,7 @@ tcu::Vec4 unpackRGB999E5 (deUint32 color)
+ 
+ bool isColorOrder (TextureFormat::ChannelOrder order)
+ {
+-	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	switch (order)
+ 	{
+@@ -619,6 +619,7 @@ bool isColorOrder (TextureFormat::ChannelOrder order)
+ 		case TextureFormat::sRGBA:
+ 		case TextureFormat::sBGR:
+ 		case TextureFormat::sBGRA:
++		case TextureFormat::sABGR:
+ 			return true;
+ 
+ 		default:
+@@ -664,10 +665,10 @@ bool isValid (TextureFormat format)
+ 		case TextureFormat::UNSIGNED_SHORT_4444:
+ 		case TextureFormat::UNSIGNED_SHORT_5551:
+ 			return format.order == TextureFormat::RGBA || format.order == TextureFormat::BGRA
+-				|| format.order == TextureFormat::ARGB || format.order == TextureFormat::ABGR;
++				|| format.order == TextureFormat::ARGB || format.order == TextureFormat::ABGR || format.order == TextureFormat::sABGR;
+ 
+ 		case TextureFormat::UNORM_SHORT_1555:
+-			return format.order == TextureFormat::ARGB || format.order == TextureFormat::ABGR;
++			return format.order == TextureFormat::ARGB || format.order == TextureFormat::ABGR || format.order == TextureFormat::sABGR;
+ 
+ 		case TextureFormat::UNORM_INT_101010:
+ 			return format.order == TextureFormat::RGB;
+@@ -731,7 +732,7 @@ bool isValid (TextureFormat format)
+ int getNumUsedChannels (TextureFormat::ChannelOrder order)
+ {
+ 	// make sure this table is updated if type table is updated
+-	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	switch (order)
+ 	{
+@@ -754,6 +755,7 @@ int getNumUsedChannels (TextureFormat::ChannelOrder order)
+ 		case TextureFormat::sRGBA:		return 4;
+ 		case TextureFormat::sBGR:		return 3;
+ 		case TextureFormat::sBGRA:		return 4;
++		case TextureFormat::sABGR:		return 4;
+ 		case TextureFormat::D:			return 1;
+ 		case TextureFormat::S:			return 1;
+ 		case TextureFormat::DS:			return 2;
+@@ -766,7 +768,7 @@ int getNumUsedChannels (TextureFormat::ChannelOrder order)
+ bool hasAlphaChannel (TextureFormat::ChannelOrder order)
+ {
+ 	// make sure this table is updated if type table is updated
+-	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	switch (order)
+ 	{
+@@ -780,6 +782,7 @@ bool hasAlphaChannel (TextureFormat::ChannelOrder order)
+ 		case TextureFormat::BGRA:
+ 		case TextureFormat::sRGBA:
+ 		case TextureFormat::sBGRA:
++		case TextureFormat::sABGR:
+ 			return true;
+ 		default:
+ 			return false;
+@@ -881,7 +884,7 @@ int TextureFormat::getPixelSize (void) const
+ const TextureSwizzle& getChannelReadSwizzle (TextureFormat::ChannelOrder order)
+ {
+ 	// make sure to update these tables when channel orders are updated
+-	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	static const TextureSwizzle INV		= {{ TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ONE	}};
+ 	static const TextureSwizzle R		= {{ TextureSwizzle::CHANNEL_0,		TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ONE	}};
+@@ -922,6 +925,7 @@ const TextureSwizzle& getChannelReadSwizzle (TextureFormat::ChannelOrder order)
+ 		case TextureFormat::sRGBA:		return RGBA;
+ 		case TextureFormat::sBGR:		return BGR;
+ 		case TextureFormat::sBGRA:		return BGRA;
++		case TextureFormat::sABGR:		return ABGR;
+ 		case TextureFormat::D:			return D;
+ 		case TextureFormat::S:			return S;
+ 		case TextureFormat::DS:			return DS;
+@@ -935,7 +939,7 @@ const TextureSwizzle& getChannelReadSwizzle (TextureFormat::ChannelOrder order)
+ const TextureSwizzle& getChannelWriteSwizzle (TextureFormat::ChannelOrder order)
+ {
+ 	// make sure to update these tables when channel orders are updated
+-	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	static const TextureSwizzle INV		= {{ TextureSwizzle::CHANNEL_LAST,	TextureSwizzle::CHANNEL_LAST,	TextureSwizzle::CHANNEL_LAST,	TextureSwizzle::CHANNEL_LAST	}};
+ 	static const TextureSwizzle R		= {{ TextureSwizzle::CHANNEL_0,		TextureSwizzle::CHANNEL_LAST,	TextureSwizzle::CHANNEL_LAST,	TextureSwizzle::CHANNEL_LAST	}};
+@@ -975,6 +979,7 @@ const TextureSwizzle& getChannelWriteSwizzle (TextureFormat::ChannelOrder order)
+ 		case TextureFormat::sRGBA:		return RGBA;
+ 		case TextureFormat::sBGR:		return BGR;
+ 		case TextureFormat::sBGRA:		return BGRA;
++		case TextureFormat::sABGR:		return ABGR;
+ 		case TextureFormat::D:			return D;
+ 		case TextureFormat::S:			return S;
+ 
+@@ -4437,6 +4442,7 @@ std::ostream& operator<< (std::ostream& str, TextureFormat::ChannelOrder order)
+ 		"sRGBA",
+ 		"sBGR",
+ 		"sBGRA",
++		"sABGR",
+ 
+ 		"D",
+ 		"S",
+diff --git a/framework/common/tcuTexture.hpp b/framework/common/tcuTexture.hpp
+index fb13e58..e430bd8 100644
+--- a/framework/common/tcuTexture.hpp
++++ b/framework/common/tcuTexture.hpp
+@@ -62,6 +62,7 @@ public:
+ 		sRGBA,
+ 		sBGR,
+ 		sBGRA,
++		sABGR,
+ 
+ 		D,
+ 		S,
+diff --git a/framework/common/tcuTextureUtil.cpp b/framework/common/tcuTextureUtil.cpp
+index 3532863..57bb18a 100644
+--- a/framework/common/tcuTextureUtil.cpp
++++ b/framework/common/tcuTextureUtil.cpp
+@@ -102,14 +102,15 @@ Vec4 linearToSRGB (const Vec4& cl)
+ bool isSRGB (TextureFormat format)
+ {
+ 	// make sure to update this if type table is updated
+-	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	return	format.order == TextureFormat::sR		||
+ 			format.order == TextureFormat::sRG		||
+ 			format.order == TextureFormat::sRGB		||
+ 			format.order == TextureFormat::sRGBA	||
+ 			format.order == TextureFormat::sBGR		||
+-			format.order == TextureFormat::sBGRA;
++			format.order == TextureFormat::sBGRA	||
++			format.order == TextureFormat::sABGR;
+ }
+ 
+ tcu::Vec4 linearToSRGBIfNeeded (const TextureFormat& format, const tcu::Vec4& color)
+@@ -130,7 +131,7 @@ bool isCombinedDepthStencilType (TextureFormat::ChannelType type)
+ 
+ bool hasStencilComponent (TextureFormat::ChannelOrder order)
+ {
+-	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	switch (order)
+ 	{
+@@ -145,7 +146,7 @@ bool hasStencilComponent (TextureFormat::ChannelOrder order)
+ 
+ bool hasDepthComponent (TextureFormat::ChannelOrder order)
+ {
+-	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	switch (order)
+ 	{
+@@ -1619,7 +1620,7 @@ tcu::TextureCubeArrayView getEffectiveTextureView (const tcu::TextureCubeArrayVi
+ static const TextureSwizzle& getBorderColorReadSwizzle (TextureFormat::ChannelOrder order)
+ {
+ 	// make sure to update these tables when channel orders are updated
+-	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 22);
++	DE_STATIC_ASSERT(TextureFormat::CHANNELORDER_LAST == 23);
+ 
+ 	static const TextureSwizzle INV		= {{ TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ONE	}};
+ 	static const TextureSwizzle R		= {{ TextureSwizzle::CHANNEL_0,		TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ZERO,	TextureSwizzle::CHANNEL_ONE	}};
+@@ -1657,6 +1658,7 @@ static const TextureSwizzle& getBorderColorReadSwizzle (TextureFormat::ChannelOr
+ 		case TextureFormat::sRGBA:		swizzle = &RGBA;	break;
+ 		case TextureFormat::sBGR:		swizzle = &RGB;		break;
+ 		case TextureFormat::sBGRA:		swizzle = &RGBA;	break;
++		case TextureFormat::sABGR:		swizzle = &RGBA;	break;
+ 		case TextureFormat::D:			swizzle = &D;		break;
+ 		case TextureFormat::S:			swizzle = &S;		break;
+ 
+diff --git a/framework/delibs/debase/deDefs.c b/framework/delibs/debase/deDefs.c
+index 1d13676..1aedeba 100644
+--- a/framework/delibs/debase/deDefs.c
++++ b/framework/delibs/debase/deDefs.c
+@@ -38,7 +38,7 @@ DE_STATIC_ASSERT(sizeof(deIntptr)	== sizeof(void*));
+ DE_STATIC_ASSERT(DE_PTR_SIZE		== sizeof(void*));
+ 
+ /* Sanity checks for DE_PTR_SIZE & DE_CPU */
+-#if !((DE_CPU == DE_CPU_X86_64 || DE_CPU == DE_CPU_ARM_64 || DE_CPU == DE_CPU_MIPS_64 || DE_CPU == DE_CPU_RISCV_64) && (DE_PTR_SIZE == 8)) && \
++#if (DE_CPU != DE_CPU_VANILLA) && !((DE_CPU == DE_CPU_X86_64 || DE_CPU == DE_CPU_ARM_64 || DE_CPU == DE_CPU_MIPS_64 || DE_CPU == DE_CPU_RISCV_64) && (DE_PTR_SIZE == 8)) && \
+ 	!((DE_CPU == DE_CPU_X86    || DE_CPU == DE_CPU_ARM    || DE_CPU == DE_CPU_MIPS    || DE_CPU == DE_CPU_RISCV_32) && (DE_PTR_SIZE == 4))
+ #	error "DE_CPU and DE_PTR_SIZE mismatch"
+ #endif
+diff --git a/modules/gles2/functional/es2fRasterizationTests.cpp b/modules/gles2/functional/es2fRasterizationTests.cpp
+index 80eab81..6706068 100644
+--- a/modules/gles2/functional/es2fRasterizationTests.cpp
++++ b/modules/gles2/functional/es2fRasterizationTests.cpp
+@@ -663,7 +663,8 @@ public:
+ 		{
+ 			for (deUint32 x = 0; x < testAreaWidth; ++x)
+ 			{
+-				tcu::RGBA color(pixels[y * testAreaWidth + x]);
++				const deUint8* colorBytes = reinterpret_cast<const deUint8*>(&pixels[y * testAreaWidth + x]); // glReadPixels bytes
++				tcu::RGBA color(colorBytes[0], colorBytes[1], colorBytes[2], colorBytes[3]);
+ 				TCU_CHECK(compareThreshold(color, tcu::RGBA::green(), threshold));
+ 			}
+ 		}
+diff --git a/modules/gles3/functional/es3fFboMultisampleTests.cpp b/modules/gles3/functional/es3fFboMultisampleTests.cpp
+index 82b8451..e4fd69e 100644
+--- a/modules/gles3/functional/es3fFboMultisampleTests.cpp
++++ b/modules/gles3/functional/es3fFboMultisampleTests.cpp
+@@ -328,7 +328,8 @@ protected:
+ 		{
+ 			for (deUint32 x = 0; x < W2; ++x)
+ 			{
+-				tcu::RGBA color(pixels[y * W2 + x]);
++				const deUint8* colorBytes = reinterpret_cast<const deUint8*>(&pixels[y * W2 + x]); // glReadPixels bytes
++				tcu::RGBA color(colorBytes[0], colorBytes[1], colorBytes[2], colorBytes[3]);
+ 				TCU_CHECK(compareThreshold(color, tcu::RGBA::green(), threshold));
+ 			}
+ 		}

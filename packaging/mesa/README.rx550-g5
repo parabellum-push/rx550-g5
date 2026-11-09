@@ -1,0 +1,76 @@
+Mesa 26.2.6 for the Radeon RX 550 on big-endian PowerPC (Power Mac G5)
+=======================================================================
+
+These packages replace the Debian/MintPPC Mesa 26.2.6-1 packages of the same
+names. They are built from Mesa 26.2.6 with the Debian patches and the same
+drivers and options as the Debian ppc64 build, plus fixes that let the AMD
+drivers run on a big-endian CPU:
+
+  mesa-libgallium      Gallium drivers (radeonsi, r300, r600, nouveau, virgl,
+                       zink, llvmpipe, softpipe), GL dispatch, VA-API
+  libgl1-mesa-dri      DRI loader stubs and libdril
+  libegl-mesa0         EGL (X11, Wayland, GBM, surfaceless)
+  libglx-mesa0         GLX
+  libgbm1              GBM
+  mesa-va-drivers      empty, as in Debian (VA-API is in mesa-libgallium)
+  mesa-vdpau-drivers   empty: Mesa removed VDPAU in 25.3 (use VA-API).
+                       Installing it removes the Mesa 24 VDPAU drivers.
+  mesa-vulkan-drivers  Vulkan (radv, lavapipe, venus, gfxstream, layers)
+  mesa-opencl-icd      OpenCL 3.1 (Rusticl) on radeonsi. Debian builds this
+                       package for ppc64el but not for ppc64; this one follows
+                       the ppc64el package.
+
+They use the Debian libllvm22 package; mesa-opencl-icd also needs libclc-22,
+libclang-cpp22, libllvmspirvlib22.1 and an ICD loader (ocl-icd-libopencl1),
+all from debian-ports.
+
+OpenCL notes
+------------
+* Rusticl is enabled on radeonsi by default here (upstream and Debian need
+  RUSTICL_ENABLE=radeonsi). clinfo shows "rusticl" with the RX 550.
+* The device reports itself as big-endian (CL_DEVICE_ENDIAN_LITTLE = false):
+  buffers, kernel arguments and images hold host-order data, as OpenCL
+  requires. Atomics on buffers run as compare-and-swap loops.
+* fp64 (cl_khr_fp64) is off by default, as upstream; RUSTICL_FEATURES=fp64
+  turns it on.
+* The first build of a program takes about 10 seconds on a PPC970MP (clang and
+  libclc); later builds of the same source come from the shader cache in about
+  a second. Driver updates empty that cache.
+
+What changed compared with stock Mesa 26.2.6
+--------------------------------------------
+The full source diff is rx550-g5-vs-mesa-26.2.6.diff.gz in this directory
+(it includes the three Debian patches). Almost all of it only takes effect on
+a big-endian CPU with a GFX8 GPU (Polaris: RX 460/470/480/550/560/570/580);
+other GPUs and CPUs get stock code.
+
+* GPU commands: command buffers, fences, shader binaries, descriptors and
+  query results are converted to the GPU's little-endian byte order. UVD
+  decode messages are encoded little-endian.
+* Application data: vertex and index buffers, texel and image buffers, SSBOs,
+  buffer device addresses, clears and copies between buffers and images are
+  converted in the driver or in the shader.
+* On big-endian, radeonsi compiles shaders with LLVM; RADV uses ACO.
+* Shared Mesa code that was wrong on big-endian: HTILE (depth compression)
+  bitfields, packed-float formats, DRI/EGL framebuffer formats, Vulkan vertex
+  binding strides, the sparse-buffer PRT workaround bit read from libdrm, and
+  VA-API P010/P016 images (kept little-endian, as VA-API defines them).
+* RADV reports Vulkan 1.3 on this configuration (the tested CTS is 1.3).
+* OpenCL: SPIR-V and clang output on a big-endian host, libclc NIR
+  serialisation, kernel memory byte order. Two fixes are not big-endian
+  specific: scratch (private memory) accesses now carry their real alignment
+  in the LLVM backend, and image copies on compute-only contexts discard DCC
+  first so that float NaN payloads are copied bit for bit.
+
+Tested on a Power Mac G5 (PPC970MP) with an RX 550, on the exact bytes of
+these packages: Khronos GL CTS (GLES2/3/31 and KHR-GL46 lists, 17,887 cases)
+and a stratified Vulkan CTS sample (63,560 cases) with no regressions against
+the previous release; VA-API decode and VCE encode (H.264, HEVC) with ffmpeg;
+the Khronos OpenCL CTS quick list (results below). This is not a Khronos
+conformance submission.
+
+OpenCL CTS (quick list) on these packages:
+@OCL_RESULTS@
+
+These packages need the patched amdgpu kernel driver from
+linux-image-*-rx550g5; the stock kernel driver lacks the big-endian fixes.
