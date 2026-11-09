@@ -1,4 +1,7 @@
-# rx550-g5: an AMD Radeon RX 550 on a Power Mac G5
+# !Warning! This repo is vibe-coded.
+I am only sharing it since it works on my machine. 
+
+# AMD Radeon RX 550 on a Power Mac G5
 
 Everything needed to run a Polaris GPU (RX 550, GFX8) in a **big-endian** Power Mac G5
 (PPC970MP) under Debian / MintPPC ppc64: OpenGL 4.6, OpenGL ES 3.2, Vulkan 1.3, OpenCL 3.1
@@ -16,8 +19,8 @@ Ready-made packages are in the [Releases](https://github.com/parabellum-push/rx5
 
 ## Install (packages)
 
-See [docs/INSTALL.md](docs/INSTALL.md). In short, on Debian ppc64 / MintPPC with the AMD firmware
-available:
+See [docs/INSTALL.md](docs/INSTALL.md).
+on Debian ppc64 / MintPPC with the AMD firmware available:
 
 ```sh
 sudo apt install ./linux-image-*-rx550g5*.deb ./*.deb
@@ -48,6 +51,6 @@ submission, and nothing has been submitted upstream yet. Details in [docs/STATUS
 
 ## Licenses
 
-Mesa changes: MIT (as Mesa). Kernel patches: GPL-2.0. CTS patches: Apache-2.0 (as the CTS).
-Scripts, probes and packaging in this repo: MIT (see LICENSE). Packages in the releases contain
+Mesa changes: MIT. Kernel patches: GPL-2.0. CTS patches: Apache-2.0.
+Scripts, probes and packaging in this repo: MIT. Packages in the releases contain
 Debian's own documentation and copyright files unchanged.
