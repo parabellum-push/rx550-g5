@@ -42,6 +42,10 @@ machine.
   ran at the same time. It did not reproduce in three further full GLES3 runs under the same load.
 - First build of an OpenCL program takes about 10 s on a 970MP (clang and libclc); later builds come
   from the shader cache (~1 s). Driver updates empty the cache.
+- OpenCL FP32 throughput: kernels built on `fma()` reach about 1/4 of peak (370 GFLOP/s on an RX 550)
+  because Polaris runs `v_fma_f32` at quarter rate; `mad()` or `a*b+c` compile to `v_mad/v_mac_f32` and
+  reach 1,100 GFLOP/s. 32-bit integer multiply (`v_mul_lo_u32`) is also quarter rate; `mad24` is full rate.
+  This is the hardware, not the port (`probes/fmaprobe.c`).
 - Rusticl prints "Patched Mesa libclc not detected" with Debian's libclc; that is the same on every
   Debian architecture.
 
