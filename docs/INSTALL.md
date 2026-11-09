@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Power Mac G5 (tested: PPC970MP) with a Polaris card (tested: RX 550, 4 GB).
+- Power Mac G5 (tested: PPC970MP) with a Polaris card (tested: RX 550, 2 GB).
 - Debian sid ppc64 (debian-ports) or MintPPC ppc64.
 - `firmware-amd-graphics`. MintPPC carries it. On plain debian-ports it is missing (it is an
   `Architecture: all` package from Debian's non-free-firmware, which debian-ports does not mirror):
