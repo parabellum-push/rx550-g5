@@ -1,0 +1,833 @@
+From: RX550 G5 port
+Subject: [PATCH 3/4] drm/amd/pm: big-endian fixes for powerplay (SMU7/Polaris tables)
+
+---
+diff -ruN a/drivers/gpu/drm/amd/pm/powerplay/hwmgr/hwmgr.c b/drivers/gpu/drm/amd/pm/powerplay/hwmgr/hwmgr.c
+--- a/drivers/gpu/drm/amd/pm/powerplay/hwmgr/hwmgr.c
++++ b/drivers/gpu/drm/amd/pm/powerplay/hwmgr/hwmgr.c
+@@ -225,6 +225,18 @@
+ 	return 0;
+ }
+ 
++static void hwmgr_g5_diag(struct pp_hwmgr *hwmgr, const char *stage, int result)
++{
++	struct amdgpu_device *adev = hwmgr->adev;
++
++	if (adev->asic_type == CHIP_POLARIS11) {
++		if (result)
++			dev_err(adev->dev, "PP-DIAG: stage=%s result=%d\n", stage, result);
++		else
++			dev_dbg(adev->dev, "PP-DIAG: stage=%s result=%d\n", stage, result);
++	}
++}
++
+ int hwmgr_hw_init(struct pp_hwmgr *hwmgr)
+ {
+ 	int ret = 0;
+@@ -232,8 +244,10 @@
+ 	hwmgr->pp_one_vf = amdgpu_sriov_is_pp_one_vf((struct amdgpu_device *)hwmgr->adev);
+ 	hwmgr->pm_en = (amdgpu_dpm && (hwmgr->not_vf || hwmgr->pp_one_vf))
+ 			? true : false;
+-	if (!hwmgr->pm_en)
++	if (!hwmgr->pm_en) {
++		hwmgr_g5_diag(hwmgr, "dynamic-power-management-disabled", 0);
+ 		return 0;
++	}
+ 
+ 	if (!hwmgr->pptable_func ||
+ 	    !hwmgr->pptable_func->pptable_init ||
+@@ -243,14 +257,18 @@
+ 		return 0;
+ 	}
+ 
++	hwmgr_g5_diag(hwmgr, "pptable-init-enter", 0);
+ 	ret = hwmgr->pptable_func->pptable_init(hwmgr);
++	hwmgr_g5_diag(hwmgr, "pptable-init-leave", ret);
+ 	if (ret)
+ 		goto err;
+ 
+ 	((struct amdgpu_device *)hwmgr->adev)->pm.no_fan =
+ 				hwmgr->thermal_controller.fanInfo.bNoFan;
+ 
++	hwmgr_g5_diag(hwmgr, "backend-init-enter", 0);
+ 	ret = hwmgr->hwmgr_func->backend_init(hwmgr);
++	hwmgr_g5_diag(hwmgr, "backend-init-leave", ret);
+ 	if (ret)
+ 		goto err1;
+  /* make sure dc limits are valid */
+@@ -259,19 +277,29 @@
+ 			hwmgr->dyn_state.max_clock_voltage_on_dc =
+ 					hwmgr->dyn_state.max_clock_voltage_on_ac;
+ 
++	hwmgr_g5_diag(hwmgr, "power-state-table-enter", 0);
+ 	ret = psm_init_power_state_table(hwmgr);
++	hwmgr_g5_diag(hwmgr, "power-state-table-leave", ret);
+ 	if (ret)
+ 		goto err2;
+ 
++	hwmgr_g5_diag(hwmgr, "setup-asic-enter", 0);
+ 	ret = phm_setup_asic(hwmgr);
++	hwmgr_g5_diag(hwmgr, "setup-asic-leave", ret);
+ 	if (ret)
+ 		goto err2;
+ 
++	hwmgr_g5_diag(hwmgr, "enable-dpm-enter", 0);
+ 	ret = phm_enable_dynamic_state_management(hwmgr);
++	hwmgr_g5_diag(hwmgr, "enable-dpm-leave", ret);
+ 	if (ret)
+ 		goto err2;
++	hwmgr_g5_diag(hwmgr, "thermal-controller-enter", 0);
+ 	ret = phm_start_thermal_controller(hwmgr);
++	hwmgr_g5_diag(hwmgr, "thermal-controller-leave", ret);
++	hwmgr_g5_diag(hwmgr, "performance-states-enter", 0);
+ 	ret |= psm_set_performance_states(hwmgr);
++	hwmgr_g5_diag(hwmgr, "performance-states-leave", ret);
+ 	if (ret)
+ 		goto err2;
+ 
+diff -ruN a/drivers/gpu/drm/amd/pm/powerplay/hwmgr/ppatomctrl.c b/drivers/gpu/drm/amd/pm/powerplay/hwmgr/ppatomctrl.c
+--- a/drivers/gpu/drm/amd/pm/powerplay/hwmgr/ppatomctrl.c
++++ b/drivers/gpu/drm/amd/pm/powerplay/hwmgr/ppatomctrl.c
+@@ -24,6 +24,7 @@
+ #include <linux/module.h>
+ #include <linux/slab.h>
+ #include <linux/delay.h>
++#include <linux/unaligned.h>
+ #include "atom.h"
+ #include "ppatomctrl.h"
+ #include "atombios.h"
+@@ -352,10 +353,10 @@
+ 		uint32_t clock_value, pp_atomctrl_memory_clock_param *mpll_param)
+ {
+ 	struct amdgpu_device *adev = hwmgr->adev;
+-	COMPUTE_MEMORY_CLOCK_PARAM_PARAMETERS_V2_2 mpll_parameters;
++	COMPUTE_MEMORY_CLOCK_PARAM_PARAMETERS_V2_2 mpll_parameters = { 0 };
+ 	int result;
+ 
+-	mpll_parameters.ulClock.ulClock = cpu_to_le32(clock_value);
++	put_unaligned_le32(clock_value & SET_CLOCK_FREQ_MASK, &mpll_parameters.ulClock);
+ 
+ 	result = amdgpu_atom_execute_table(adev->mode_info.atom_context,
+ 			GetIndexIntoMasterTable(COMMAND, ComputeMemoryClockParam),
+@@ -363,7 +364,7 @@
+ 
+ 	if (!result)
+ 		mpll_param->mpll_post_divider =
+-				(uint32_t)mpll_parameters.ulClock.ucPostDiv;
++				(get_unaligned_le32(&mpll_parameters.ulClock) >> 24);
+ 
+ 	return result;
+ }
+@@ -373,10 +374,10 @@
+ 					pp_atomctrl_memory_clock_param_ai *mpll_param)
+ {
+ 	struct amdgpu_device *adev = hwmgr->adev;
+-	COMPUTE_MEMORY_CLOCK_PARAM_PARAMETERS_V2_3 mpll_parameters = {{0}, 0, 0};
++	COMPUTE_MEMORY_CLOCK_PARAM_PARAMETERS_V2_3 mpll_parameters = { 0 };
+ 	int result;
+ 
+-	mpll_parameters.ulClock.ulClock = cpu_to_le32(clock_value);
++	put_unaligned_le32(clock_value & SET_CLOCK_FREQ_MASK, &mpll_parameters.ulClock);
+ 
+ 	result = amdgpu_atom_execute_table(adev->mode_info.atom_context,
+ 			GetIndexIntoMasterTable(COMMAND, ComputeMemoryClockParam),
+@@ -391,8 +392,8 @@
+ 		mpll_param->ulMclk_fcw_frac =
+ 			le16_to_cpu(mpll_parameters.usMclk_fcw_frac);
+ 		mpll_param->ulClock =
+-			le32_to_cpu(mpll_parameters.ulClock.ulClock);
+-		mpll_param->ulPostDiv = mpll_parameters.ulClock.ucPostDiv;
++			(get_unaligned_le32(&mpll_parameters.ulClock) & SET_CLOCK_FREQ_MASK);
++		mpll_param->ulPostDiv = get_unaligned_le32(&mpll_parameters.ulClock) >> 24;
+ 	}
+ 
+ 	return result;
+@@ -426,11 +427,12 @@
+ 		pp_atomctrl_clock_dividers_vi *dividers)
+ {
+ 	struct amdgpu_device *adev = hwmgr->adev;
+-	COMPUTE_GPU_CLOCK_OUTPUT_PARAMETERS_V1_6 pll_patameters;
++	COMPUTE_GPU_CLOCK_OUTPUT_PARAMETERS_V1_6 pll_patameters = { 0 };
+ 	int result;
+ 
+-	pll_patameters.ulClock.ulClock = cpu_to_le32(clock_value);
+-	pll_patameters.ulClock.ucPostDiv = COMPUTE_GPUCLK_INPUT_FLAG_SCLK;
++	put_unaligned_le32((clock_value & SET_CLOCK_FREQ_MASK) |
++			   (COMPUTE_GPUCLK_INPUT_FLAG_SCLK << 24),
++			   &pll_patameters.ulClock);
+ 
+ 	result = amdgpu_atom_execute_table(adev->mode_info.atom_context,
+ 		 GetIndexIntoMasterTable(COMMAND, ComputeMemoryEnginePLL),
+@@ -438,9 +440,9 @@
+ 
+ 	if (0 == result) {
+ 		dividers->pll_post_divider =
+-			pll_patameters.ulClock.ucPostDiv;
++			(get_unaligned_le32(&pll_patameters.ulClock) >> 24);
+ 		dividers->real_clock =
+-			le32_to_cpu(pll_patameters.ulClock.ulClock);
++			(get_unaligned_le32(&pll_patameters.ulClock) & SET_CLOCK_FREQ_MASK);
+ 
+ 		dividers->ul_fb_div.ul_fb_div_frac =
+ 			le16_to_cpu(pll_patameters.ulFbDiv.usFbDivFrac);
+@@ -463,11 +465,16 @@
+ 		pp_atomctrl_clock_dividers_ai *dividers)
+ {
+ 	struct amdgpu_device *adev = hwmgr->adev;
+-	COMPUTE_GPU_CLOCK_OUTPUT_PARAMETERS_V1_7 pll_patameters;
++	COMPUTE_GPU_CLOCK_OUTPUT_PARAMETERS_V1_7 pll_patameters = { 0 };
+ 	int result;
+ 
+-	pll_patameters.ulClock.ulClock = cpu_to_le32(clock_value);
+-	pll_patameters.ulClock.ucPostDiv = COMPUTE_GPUCLK_INPUT_FLAG_SCLK;
++	put_unaligned_le32((clock_value & SET_CLOCK_FREQ_MASK) |
++			   (COMPUTE_GPUCLK_INPUT_FLAG_SCLK << 24),
++			   &pll_patameters.ulClock);
++
++	if (adev->asic_type == CHIP_POLARIS11)
++		dev_dbg(adev->dev, "PP-PLL-SCLK: request=%u parameter=%4ph\n",
++		         clock_value, &pll_patameters.ulClock);
+ 
+ 	result = amdgpu_atom_execute_table(adev->mode_info.atom_context,
+ 		 GetIndexIntoMasterTable(COMMAND, ComputeMemoryEnginePLL),
+@@ -485,6 +492,12 @@
+ 		dividers->usPcc_fcw_int       = le16_to_cpu(pll_patameters.usPcc_fcw_int);
+ 		dividers->usSsc_fcw_slew_frac = le16_to_cpu(pll_patameters.usSsc_fcw_slew_frac);
+ 		dividers->usPcc_fcw_slew_frac = le16_to_cpu(pll_patameters.usPcc_fcw_slew_frac);
++		if (adev->asic_type == CHIP_POLARIS11)
++			dev_dbg(adev->dev,
++			         "PP-PLL-SCLK: clock=%u fcw=%u.%u postdiv=%u range=%u\n",
++			         clock_value, dividers->usSclk_fcw_int,
++			         dividers->usSclk_fcw_frac, dividers->ucSclkPostDiv,
++			         dividers->ucSclkPllRange);
+ 	}
+ 	return result;
+ }
+@@ -495,12 +508,12 @@
+ 		pp_atomctrl_clock_dividers_vi *dividers)
+ {
+ 	struct amdgpu_device *adev = hwmgr->adev;
+-	COMPUTE_GPU_CLOCK_OUTPUT_PARAMETERS_V1_6 pll_patameters;
++	COMPUTE_GPU_CLOCK_OUTPUT_PARAMETERS_V1_6 pll_patameters = { 0 };
+ 	int result;
+ 
+-	pll_patameters.ulClock.ulClock = cpu_to_le32(clock_value);
+-	pll_patameters.ulClock.ucPostDiv =
+-		COMPUTE_GPUCLK_INPUT_FLAG_DEFAULT_GPUCLK;
++	put_unaligned_le32((clock_value & SET_CLOCK_FREQ_MASK) |
++			   (COMPUTE_GPUCLK_INPUT_FLAG_DEFAULT_GPUCLK << 24),
++			   &pll_patameters.ulClock);
+ 
+ 	result = amdgpu_atom_execute_table(adev->mode_info.atom_context,
+ 		 GetIndexIntoMasterTable(COMMAND, ComputeMemoryEnginePLL),
+@@ -508,9 +521,9 @@
+ 
+ 	if (0 == result) {
+ 		dividers->pll_post_divider =
+-			pll_patameters.ulClock.ucPostDiv;
++			(get_unaligned_le32(&pll_patameters.ulClock) >> 24);
+ 		dividers->real_clock =
+-			le32_to_cpu(pll_patameters.ulClock.ulClock);
++			(get_unaligned_le32(&pll_patameters.ulClock) & SET_CLOCK_FREQ_MASK);
+ 
+ 		dividers->ul_fb_div.ul_fb_div_frac =
+ 			le16_to_cpu(pll_patameters.ulFbDiv.usFbDivFrac);
+@@ -956,14 +969,18 @@
+ 			      uint8_t level)
+ {
+ 	struct amdgpu_device *adev = hwmgr->adev;
+-	DYNAMICE_MEMORY_SETTINGS_PARAMETER_V2_1 memory_clock_parameters;
++	DYNAMICE_MEMORY_SETTINGS_PARAMETER_V2_1 memory_clock_parameters = { 0 };
+ 	int result;
+ 
+-	memory_clock_parameters.asDPMMCReg.ulClock.ulClockFreq =
+-		memory_clock & SET_CLOCK_FREQ_MASK;
+-	memory_clock_parameters.asDPMMCReg.ulClock.ulComputeClockFlag =
+-		ADJUST_MC_SETTING_PARAM;
++	/* ATOM parameter dwords are little-endian, including this packed clock
++	 * and command word. Native bitfield writes are not a wire encoding. */
++	put_unaligned_le32((memory_clock & SET_CLOCK_FREQ_MASK) |
++			   (ADJUST_MC_SETTING_PARAM << 24),
++			   &memory_clock_parameters.asDPMMCReg.ulClock);
+ 	memory_clock_parameters.asDPMMCReg.ucMclkDPMState = level;
++	if (adev->asic_type == CHIP_POLARIS11)
++		dev_dbg(adev->dev, "PP-ATOM-MCLK: clock=%u level=%u parameter=%8ph\n",
++		         memory_clock, level, &memory_clock_parameters);
+ 
+ 	result = amdgpu_atom_execute_table(adev->mode_info.atom_context,
+ 		 GetIndexIntoMasterTable(COMMAND, DynamicMemorySettings),
+diff -ruN a/drivers/gpu/drm/amd/pm/powerplay/hwmgr/smu7_hwmgr.c b/drivers/gpu/drm/amd/pm/powerplay/hwmgr/smu7_hwmgr.c
+--- a/drivers/gpu/drm/amd/pm/powerplay/hwmgr/smu7_hwmgr.c
++++ b/drivers/gpu/drm/amd/pm/powerplay/hwmgr/smu7_hwmgr.c
+@@ -25,6 +25,7 @@
+ #include <linux/module.h>
+ #include <linux/pci.h>
+ #include <linux/slab.h>
++#include <linux/unaligned.h>
+ #include <asm/div64.h>
+ #if IS_ENABLED(CONFIG_X86_64)
+ #include <asm/intel-family.h>
+@@ -1196,6 +1197,38 @@
+ 	return 0;
+ }
+ 
++static void smu7_g5_dpm_diag(struct pp_hwmgr *hwmgr, const char *stage, int result)
++{
++	struct amdgpu_device *adev = hwmgr->adev;
++
++	if (adev->asic_type == CHIP_POLARIS11) {
++		if (result)
++			dev_err(adev->dev, "PP-DPM-STEP: stage=%s result=%d\n", stage, result);
++		else
++			dev_dbg(adev->dev, "PP-DPM-STEP: stage=%s result=%d\n", stage, result);
++	}
++}
++
++static int smu7_g5_dpm_send_msg(struct pp_hwmgr *hwmgr, uint16_t msg,
++                               const char *name)
++{
++	struct amdgpu_device *adev = hwmgr->adev;
++	int result;
++
++	if (adev->asic_type == CHIP_POLARIS11)
++		dev_dbg(adev->dev, "PP-DPM-MSG: name=%s id=%04x enter\n", name, msg);
++	result = smum_send_msg_to_smc(hwmgr, msg, NULL);
++	if (adev->asic_type == CHIP_POLARIS11) {
++		if (result)
++			dev_err(adev->dev, "PP-DPM-MSG: name=%s id=%04x leave result=%d\n",
++				name, msg, result);
++		else
++			dev_dbg(adev->dev, "PP-DPM-MSG: name=%s id=%04x leave result=%d\n",
++				name, msg, result);
++	}
++	return result;
++}
++
+ static int smu7_enable_sclk_mclk_dpm(struct pp_hwmgr *hwmgr)
+ {
+ 	struct smu7_hwmgr *data = (struct smu7_hwmgr *)(hwmgr->backend);
+@@ -1203,27 +1236,32 @@
+ 	/* enable SCLK dpm */
+ 	if (!data->sclk_dpm_key_disabled) {
+ 		if (hwmgr->chip_id >= CHIP_POLARIS10 &&
+-		    hwmgr->chip_id <= CHIP_VEGAM)
++		    hwmgr->chip_id <= CHIP_VEGAM) {
++			smu7_g5_dpm_diag(hwmgr, "smu7_disable_sclk_vce_handshake-enter", 0);
+ 			smu7_disable_sclk_vce_handshake(hwmgr);
++			smu7_g5_dpm_diag(hwmgr, "smu7_disable_sclk_vce_handshake-leave", 0);
++		}
+ 
+ 		PP_ASSERT_WITH_CODE(
+-		(0 == smum_send_msg_to_smc(hwmgr, PPSMC_MSG_DPM_Enable, NULL)),
++		(0 == smu7_g5_dpm_send_msg(hwmgr, PPSMC_MSG_DPM_Enable, "PPSMC_MSG_DPM_Enable")),
+ 		"Failed to enable SCLK DPM during DPM Start Function!",
+ 		return -EINVAL);
+ 	}
+ 
+ 	/* enable MCLK dpm */
+ 	if (0 == data->mclk_dpm_key_disabled) {
+-		if (!(hwmgr->feature_mask & PP_UVD_HANDSHAKE_MASK))
++		if (!(hwmgr->feature_mask & PP_UVD_HANDSHAKE_MASK)) {
++			smu7_g5_dpm_diag(hwmgr, "smu7_disable_handshake_uvd-enter", 0);
+ 			smu7_disable_handshake_uvd(hwmgr);
++			smu7_g5_dpm_diag(hwmgr, "smu7_disable_handshake_uvd-leave", 0);
++		}
+ 
+ 		PP_ASSERT_WITH_CODE(
+-				(0 == smum_send_msg_to_smc(hwmgr,
+-						PPSMC_MSG_MCLKDPM_Enable,
+-						NULL)),
++				(0 == smu7_g5_dpm_send_msg(hwmgr, PPSMC_MSG_MCLKDPM_Enable, "PPSMC_MSG_MCLKDPM_Enable")),
+ 				"Failed to enable MCLK DPM during DPM Start Function!",
+ 				return -EINVAL);
+ 
++		smu7_g5_dpm_diag(hwmgr, "mclk-lcac-registers-enter", 0);
+ 		if ((hwmgr->chip_family == AMDGPU_FAMILY_CI) ||
+ 		    (hwmgr->chip_id == CHIP_POLARIS10) ||
+ 		    (hwmgr->chip_id == CHIP_POLARIS11) ||
+@@ -1255,6 +1293,7 @@
+ 			}
+ 			cgs_write_ind_register(hwmgr->device, CGS_IND_REG__SMC, ixLCAC_CPL_CNTL, 0x500005);
+ 		}
++		smu7_g5_dpm_diag(hwmgr, "mclk-lcac-registers-leave", 0);
+ 	}
+ 
+ 	return 0;
+@@ -1266,54 +1305,59 @@
+ 
+ 	/*enable general power management */
+ 
++	smu7_g5_dpm_diag(hwmgr, "global-power-management-enter", 0);
+ 	PHM_WRITE_INDIRECT_FIELD(hwmgr->device, CGS_IND_REG__SMC, GENERAL_PWRMGT,
+ 			GLOBAL_PWRMGT_EN, 1);
++	smu7_g5_dpm_diag(hwmgr, "global-power-management-leave", 0);
+ 
+ 	/* enable sclk deep sleep */
+ 
++	smu7_g5_dpm_diag(hwmgr, "sclk-dynamic-pm-enter", 0);
+ 	PHM_WRITE_INDIRECT_FIELD(hwmgr->device, CGS_IND_REG__SMC, SCLK_PWRMGT_CNTL,
+ 			DYNAMIC_PM_EN, 1);
++	smu7_g5_dpm_diag(hwmgr, "sclk-dynamic-pm-leave", 0);
+ 
+ 	/* prepare for PCIE DPM */
+ 
++	smu7_g5_dpm_diag(hwmgr, "voltage-change-timeout-enter", 0);
+ 	cgs_write_ind_register(hwmgr->device, CGS_IND_REG__SMC,
+ 			data->soft_regs_start +
+ 			smum_get_offsetof(hwmgr, SMU_SoftRegisters,
+ 						VoltageChangeTimeout), 0x1000);
++	smu7_g5_dpm_diag(hwmgr, "voltage-change-timeout-leave", 0);
++	smu7_g5_dpm_diag(hwmgr, "pcie-resetlc-clear-enter", 0);
+ 	PHM_WRITE_INDIRECT_FIELD(hwmgr->device, CGS_IND_REG__PCIE,
+ 			SWRST_COMMAND_1, RESETLC, 0x0);
++	smu7_g5_dpm_diag(hwmgr, "pcie-resetlc-clear-leave", 0);
+ 
+ 	if (hwmgr->chip_family == AMDGPU_FAMILY_CI)
+ 		cgs_write_register(hwmgr->device, 0x1488,
+ 			(cgs_read_register(hwmgr->device, 0x1488) & ~0x1));
+ 
++	smu7_g5_dpm_diag(hwmgr, "sclk-mclk-enable-enter", 0);
+ 	if (smu7_enable_sclk_mclk_dpm(hwmgr)) {
+ 		pr_err("Failed to enable Sclk DPM and Mclk DPM!");
+ 		return -EINVAL;
+ 	}
+ 
++	smu7_g5_dpm_diag(hwmgr, "sclk-mclk-enable-leave", 0);
++
+ 	/* enable PCIE dpm */
+ 	if (0 == data->pcie_dpm_key_disabled) {
+ 		PP_ASSERT_WITH_CODE(
+-				(0 == smum_send_msg_to_smc(hwmgr,
+-						PPSMC_MSG_PCIeDPM_Enable,
+-						NULL)),
++				(0 == smu7_g5_dpm_send_msg(hwmgr, PPSMC_MSG_PCIeDPM_Enable, "PPSMC_MSG_PCIeDPM_Enable")),
+ 				"Failed to enable pcie DPM during DPM Start Function!",
+ 				return -EINVAL);
+ 	} else {
+ 		PP_ASSERT_WITH_CODE(
+-				(0 == smum_send_msg_to_smc(hwmgr,
+-						PPSMC_MSG_PCIeDPM_Disable,
+-						NULL)),
++				(0 == smu7_g5_dpm_send_msg(hwmgr, PPSMC_MSG_PCIeDPM_Disable, "PPSMC_MSG_PCIeDPM_Disable")),
+ 				"Failed to disable pcie DPM during DPM Start Function!",
+ 				return -EINVAL);
+ 	}
+ 
+ 	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
+ 				PHM_PlatformCaps_Falcon_QuickTransition)) {
+-		PP_ASSERT_WITH_CODE((0 == smum_send_msg_to_smc(hwmgr,
+-				PPSMC_MSG_EnableACDCGPIOInterrupt,
+-				NULL)),
++		PP_ASSERT_WITH_CODE((0 == smu7_g5_dpm_send_msg(hwmgr, PPSMC_MSG_EnableACDCGPIOInterrupt, "PPSMC_MSG_EnableACDCGPIOInterrupt")),
+ 				"Failed to enable AC DC GPIO Interrupt!",
+ 				);
+ 	}
+@@ -1563,23 +1607,32 @@
+ 	hwmgr->pstate_mclk_peak /= 100;
+ }
+ 
++
+ static int smu7_enable_dpm_tasks(struct pp_hwmgr *hwmgr)
+ {
+ 	int tmp_result = 0;
+ 	int result = 0;
+ 
+ 	if (smu7_voltage_control(hwmgr)) {
++		smu7_g5_dpm_diag(hwmgr, "smu7_enable_voltage_control-enter", 0);
+ 		tmp_result = smu7_enable_voltage_control(hwmgr);
++		smu7_g5_dpm_diag(hwmgr, "smu7_enable_voltage_control-leave", tmp_result);
+ 		PP_ASSERT_WITH_CODE(tmp_result == 0,
+ 				"Failed to enable voltage control!",
+ 				result = tmp_result);
+ 
++		smu7_g5_dpm_diag(hwmgr, "smu7_construct_voltage_tables-enter", 0);
++
+ 		tmp_result = smu7_construct_voltage_tables(hwmgr);
++
++		smu7_g5_dpm_diag(hwmgr, "smu7_construct_voltage_tables-leave", tmp_result);
+ 		PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 				"Failed to construct voltage tables!",
+ 				result = tmp_result);
+ 	}
++	smu7_g5_dpm_diag(hwmgr, "smum_initialize_mc_reg_table-enter", 0);
+ 	smum_initialize_mc_reg_table(hwmgr);
++	smu7_g5_dpm_diag(hwmgr, "smum_initialize_mc_reg_table-leave", 0);
+ 
+ 	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
+ 			PHM_PlatformCaps_EngineSpreadSpectrumSupport))
+@@ -1591,45 +1644,77 @@
+ 		PHM_WRITE_INDIRECT_FIELD(hwmgr->device, CGS_IND_REG__SMC,
+ 				GENERAL_PWRMGT, THERMAL_PROTECTION_DIS, 0);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_program_static_screen_threshold_parameters-enter", 0);
++
+ 	tmp_result = smu7_program_static_screen_threshold_parameters(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_program_static_screen_threshold_parameters-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to program static screen threshold parameters!",
+ 			result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_display_gap-enter", 0);
++
+ 	tmp_result = smu7_enable_display_gap(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_display_gap-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to enable display gap!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_program_voting_clients-enter", 0);
++
+ 	tmp_result = smu7_program_voting_clients(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_program_voting_clients-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to program voting clients!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smum_process_firmware_header-enter", 0);
++
+ 	tmp_result = smum_process_firmware_header(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smum_process_firmware_header-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to process firmware header!", result = tmp_result);
+ 
+ 	if (hwmgr->chip_id != CHIP_VEGAM) {
++		smu7_g5_dpm_diag(hwmgr, "smu7_initial_switch_from_arbf0_to_f1-enter", 0);
+ 		tmp_result = smu7_initial_switch_from_arbf0_to_f1(hwmgr);
++		smu7_g5_dpm_diag(hwmgr, "smu7_initial_switch_from_arbf0_to_f1-leave", tmp_result);
+ 		PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 				"Failed to initialize switch from ArbF0 to F1!",
+ 				result = tmp_result);
+ 	}
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_setup_default_dpm_tables-enter", 0);
++
+ 	result = smu7_setup_default_dpm_tables(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_setup_default_dpm_tables-leave", result);
+ 	PP_ASSERT_WITH_CODE(0 == result,
+ 			"Failed to setup default DPM tables!", return result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smum_init_smc_table-enter", 0);
++
+ 	tmp_result = smum_init_smc_table(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smum_init_smc_table-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to initialize SMC table!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_vrhot_gpio_interrupt-enter", 0);
++
+ 	tmp_result = smu7_enable_vrhot_gpio_interrupt(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_vrhot_gpio_interrupt-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to enable VR hot GPIO interrupt!", result = tmp_result);
+ 
+ 	if (hwmgr->chip_id >= CHIP_POLARIS10 &&
+ 	    hwmgr->chip_id <= CHIP_VEGAM) {
++		smu7_g5_dpm_diag(hwmgr, "smu7_notify_has_display-enter", 0);
+ 		tmp_result = smu7_notify_has_display(hwmgr);
++		smu7_g5_dpm_diag(hwmgr, "smu7_notify_has_display-leave", tmp_result);
+ 		PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 				"Failed to enable display setting!", result = tmp_result);
+ 	} else {
+@@ -1638,56 +1723,104 @@
+ 
+ 	if (hwmgr->chip_id >= CHIP_POLARIS10 &&
+ 	    hwmgr->chip_id <= CHIP_VEGAM) {
++		smu7_g5_dpm_diag(hwmgr, "smu7_populate_edc_leakage_registers-enter", 0);
+ 		tmp_result = smu7_populate_edc_leakage_registers(hwmgr);
++		smu7_g5_dpm_diag(hwmgr, "smu7_populate_edc_leakage_registers-leave", tmp_result);
+ 		PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 				"Failed to populate edc leakage registers!", result = tmp_result);
+ 	}
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_sclk_control-enter", 0);
++
+ 	tmp_result = smu7_enable_sclk_control(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_sclk_control-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to enable SCLK control!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_smc_voltage_controller-enter", 0);
++
+ 	tmp_result = smu7_enable_smc_voltage_controller(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_smc_voltage_controller-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to enable voltage control!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_ulv-enter", 0);
++
+ 	tmp_result = smu7_enable_ulv(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_ulv-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to enable ULV!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_deep_sleep_master_switch-enter", 0);
++
+ 	tmp_result = smu7_enable_deep_sleep_master_switch(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_deep_sleep_master_switch-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to enable deep sleep master switch!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_didt_config-enter", 0);
++
+ 	tmp_result = smu7_enable_didt_config(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_didt_config-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((tmp_result == 0),
+ 			"Failed to enable deep sleep master switch!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_start_dpm-enter", 0);
++
+ 	tmp_result = smu7_start_dpm(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_start_dpm-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to start DPM!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_smc_cac-enter", 0);
++
+ 	tmp_result = smu7_enable_smc_cac(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_smc_cac-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to enable SMC CAC!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_power_containment-enter", 0);
++
+ 	tmp_result = smu7_enable_power_containment(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_power_containment-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to enable power containment!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_power_control_set_level-enter", 0);
++
+ 	tmp_result = smu7_power_control_set_level(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_power_control_set_level-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to power control set level!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_thermal_auto_throttle-enter", 0);
++
+ 	tmp_result = smu7_enable_thermal_auto_throttle(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_enable_thermal_auto_throttle-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"Failed to enable thermal auto throttle!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_pcie_performance_request-enter", 0);
++
+ 	tmp_result = smu7_pcie_performance_request(hwmgr);
++
++	smu7_g5_dpm_diag(hwmgr, "smu7_pcie_performance_request-leave", tmp_result);
+ 	PP_ASSERT_WITH_CODE((0 == tmp_result),
+ 			"pcie performance request failed!", result = tmp_result);
+ 
++	smu7_g5_dpm_diag(hwmgr, "smu7_populate_umdpstate_clocks-enter", 0);
+ 	smu7_populate_umdpstate_clocks(hwmgr);
++	smu7_g5_dpm_diag(hwmgr, "smu7_populate_umdpstate_clocks-leave", 0);
+ 
+ 	return 0;
+ }
+@@ -3769,14 +3902,14 @@
+ 			return -EINVAL);
+ 
+ 	/* Performance levels are arranged from low to high. */
+-	performance_level->memory_clock = mclk_dep_table->entries
+-			[state_entry->ucMemoryClockIndexLow].ulMclk;
++	performance_level->memory_clock = get_unaligned_le32(&(mclk_dep_table->entries
++			[state_entry->ucMemoryClockIndexLow].ulMclk));
+ 	if (sclk_dep_table->ucRevId == 0)
+-		performance_level->engine_clock = ((ATOM_Tonga_SCLK_Dependency_Table *)sclk_dep_table)->entries
+-			[state_entry->ucEngineClockIndexLow].ulSclk;
++		performance_level->engine_clock = get_unaligned_le32(&(((ATOM_Tonga_SCLK_Dependency_Table *)sclk_dep_table)->entries
++			[state_entry->ucEngineClockIndexLow].ulSclk));
+ 	else if (sclk_dep_table->ucRevId == 1)
+-		performance_level->engine_clock = ((ATOM_Polaris_SCLK_Dependency_Table *)sclk_dep_table)->entries
+-			[state_entry->ucEngineClockIndexLow].ulSclk;
++		performance_level->engine_clock = get_unaligned_le32(&(((ATOM_Polaris_SCLK_Dependency_Table *)sclk_dep_table)->entries
++			[state_entry->ucEngineClockIndexLow].ulSclk));
+ 	performance_level->pcie_gen = get_pcie_gen_support(data->pcie_gen_cap,
+ 			state_entry->ucPCIEGenLow);
+ 	performance_level->pcie_lane = get_pcie_lane_support(data->pcie_lane_cap,
+@@ -3784,21 +3917,29 @@
+ 
+ 	performance_level = &(smu7_power_state->performance_levels
+ 			[smu7_power_state->performance_level_count++]);
+-	performance_level->memory_clock = mclk_dep_table->entries
+-			[state_entry->ucMemoryClockIndexHigh].ulMclk;
++	performance_level->memory_clock = get_unaligned_le32(&(mclk_dep_table->entries
++			[state_entry->ucMemoryClockIndexHigh].ulMclk));
+ 
+ 	if (sclk_dep_table->ucRevId == 0)
+-		performance_level->engine_clock = ((ATOM_Tonga_SCLK_Dependency_Table *)sclk_dep_table)->entries
+-			[state_entry->ucEngineClockIndexHigh].ulSclk;
++		performance_level->engine_clock = get_unaligned_le32(&(((ATOM_Tonga_SCLK_Dependency_Table *)sclk_dep_table)->entries
++			[state_entry->ucEngineClockIndexHigh].ulSclk));
+ 	else if (sclk_dep_table->ucRevId == 1)
+-		performance_level->engine_clock = ((ATOM_Polaris_SCLK_Dependency_Table *)sclk_dep_table)->entries
+-			[state_entry->ucEngineClockIndexHigh].ulSclk;
++		performance_level->engine_clock = get_unaligned_le32(&(((ATOM_Polaris_SCLK_Dependency_Table *)sclk_dep_table)->entries
++			[state_entry->ucEngineClockIndexHigh].ulSclk));
+ 
+ 	performance_level->pcie_gen = get_pcie_gen_support(data->pcie_gen_cap,
+ 			state_entry->ucPCIEGenHigh);
+ 	performance_level->pcie_lane = get_pcie_lane_support(data->pcie_lane_cap,
+ 			state_entry->ucPCIELaneHigh);
+ 
++	if (((struct amdgpu_device *)hwmgr->adev)->asic_type == CHIP_POLARIS11)
++		dev_dbg(((struct amdgpu_device *)hwmgr->adev)->dev,
++		         "PP-STATE-CLOCK: sclk=%u,%u mclk=%u,%u\n",
++		         smu7_power_state->performance_levels[0].engine_clock,
++		         smu7_power_state->performance_levels[1].engine_clock,
++		         smu7_power_state->performance_levels[0].memory_clock,
++		         smu7_power_state->performance_levels[1].memory_clock);
++
+ 	return 0;
+ }
+ 
+diff -ruN a/drivers/gpu/drm/amd/pm/powerplay/smumgr/polaris10_smumgr.c b/drivers/gpu/drm/amd/pm/powerplay/smumgr/polaris10_smumgr.c
+--- a/drivers/gpu/drm/amd/pm/powerplay/smumgr/polaris10_smumgr.c
++++ b/drivers/gpu/drm/amd/pm/powerplay/smumgr/polaris10_smumgr.c
+@@ -235,8 +235,24 @@
+ 	PHM_WAIT_VFPF_INDIRECT_FIELD_UNEQUAL(hwmgr, SMC_IND, SMU_STATUS, SMU_DONE, 0);
+ 
+ 	if (1 != PHM_READ_VFPF_INDIRECT_FIELD(hwmgr->device, CGS_IND_REG__SMC,
+-						SMU_STATUS, SMU_PASS))
++						SMU_STATUS, SMU_PASS)) {
++		pr_err("SMU start diagnostics: status=%08x rcu=%08x flags=%08x pc=%08x reset=%08x clock=%08x firmware=%08x\n",
++		       cgs_read_ind_register(hwmgr->device, CGS_IND_REG__SMC,
++					     ixSMU_STATUS),
++		       cgs_read_ind_register(hwmgr->device, CGS_IND_REG__SMC,
++					     ixRCU_UC_EVENTS),
++		       cgs_read_ind_register(hwmgr->device, CGS_IND_REG__SMC,
++					     ixFIRMWARE_FLAGS),
++		       cgs_read_ind_register(hwmgr->device, CGS_IND_REG__SMC,
++					     ixSMC_PC_C),
++		       cgs_read_ind_register(hwmgr->device, CGS_IND_REG__SMC,
++					     ixSMC_SYSCON_RESET_CNTL),
++		       cgs_read_ind_register(hwmgr->device, CGS_IND_REG__SMC,
++					     ixSMC_SYSCON_CLOCK_CNTL_0),
++		       cgs_read_ind_register(hwmgr->device, CGS_IND_REG__SMC,
++					     ixSMU_FIRMWARE));
+ 		PP_ASSERT_WITH_CODE(false, "SMU Firmware start failed!", return -1);
++	}
+ 
+ 	cgs_write_ind_register(hwmgr->device, CGS_IND_REG__SMC, ixFIRMWARE_FLAGS, 0);
+ 
+diff -ruN a/drivers/gpu/drm/amd/pm/powerplay/smumgr/smu7_smumgr.c b/drivers/gpu/drm/amd/pm/powerplay/smumgr/smu7_smumgr.c
+--- a/drivers/gpu/drm/amd/pm/powerplay/smumgr/smu7_smumgr.c
++++ b/drivers/gpu/drm/amd/pm/powerplay/smumgr/smu7_smumgr.c
+@@ -21,6 +21,9 @@
+  *
+  */
+ 
++#include <linux/delay.h>
++#include <linux/module.h>
++#include <linux/unaligned.h>
+ 
+ #include "pp_debug.h"
+ #include "smumgr.h"
+@@ -288,8 +291,11 @@
+ 
+ int smu7_request_smu_load_fw(struct pp_hwmgr *hwmgr)
+ {
++	struct amdgpu_device *adev = hwmgr->adev;
+ 	struct smu7_smumgr *smu_data = (struct smu7_smumgr *)(hwmgr->smu_backend);
+ 	uint32_t fw_to_load;
++	uint32_t response, status;
++	unsigned int i;
+ 	int r = 0;
+ 
+ 	amdgpu_ucode_init_bo(hwmgr->adev);
+@@ -300,7 +306,16 @@
+ 					SMU_SoftRegisters, UcodeLoadStatus),
+ 					0x0);
+ 
+-	if (hwmgr->chip_id > CHIP_TOPAZ) { /* add support for Topaz */
++
++	if (adev->asic_type == CHIP_POLARIS11) {
++		fw_to_load = UCODE_ID_RLC_G_MASK
++			   + UCODE_ID_SDMA0_MASK
++			   + UCODE_ID_SDMA1_MASK
++			   + UCODE_ID_CP_CE_MASK
++			   + UCODE_ID_CP_ME_MASK
++			   + UCODE_ID_CP_PFP_MASK
++			   + UCODE_ID_CP_MEC_MASK;
++	} else if (hwmgr->chip_id > CHIP_TOPAZ) { /* add support for Topaz */
+ 		if (hwmgr->not_vf) {
+ 			smum_send_msg_to_smc_with_parameter(hwmgr,
+ 						PPSMC_MSG_SMU_DRAM_ADDR_HI,
+@@ -372,8 +387,33 @@
+ 				UCODE_ID_MEC_STORAGE, &toc->entry[toc->num_entries++]),
+ 				"Failed to Get Firmware Entry.", r = -EINVAL; goto failed);
+ 	}
++#ifdef __BIG_ENDIAN
++	{
++		u8 toc_wire[sizeof(struct SMU_DRAMData_TOC)] = {};
++
++		put_unaligned_le32(smu_data->toc->structure_version, toc_wire);
++		put_unaligned_le32(smu_data->toc->num_entries, toc_wire + 4);
++		for (i = 0; i < smu_data->toc->num_entries; i++) {
++			struct SMU_Entry *entry = &smu_data->toc->entry[i];
++			u8 *p = toc_wire + 8 + i * sizeof(*entry);
++
++			put_unaligned_le16(entry->id, p);
++			put_unaligned_le16(entry->version, p + 2);
++			put_unaligned_le32(entry->image_addr_high, p + 4);
++			put_unaligned_le32(entry->image_addr_low, p + 8);
++			put_unaligned_le32(entry->meta_data_addr_high, p + 12);
++			put_unaligned_le32(entry->meta_data_addr_low, p + 16);
++			put_unaligned_le32(entry->data_size_byte, p + 20);
++			put_unaligned_le16(entry->flags, p + 24);
++			put_unaligned_le16(entry->num_register_entries, p + 26);
++		}
++		memcpy_toio(smu_data->header_buffer.kaddr, toc_wire,
++			    sizeof(toc_wire));
++	}
++#else
+ 	memcpy_toio(smu_data->header_buffer.kaddr, smu_data->toc,
+ 		    sizeof(struct SMU_DRAMData_TOC));
++#endif
+ 	smum_send_msg_to_smc_with_parameter(hwmgr,
+ 			PPSMC_MSG_DRV_DRAM_ADDR_HI,
+ 			upper_32_bits(smu_data->header_buffer.mc_addr),
+@@ -384,6 +424,19 @@
+ 			NULL);
+ 
+ 	smum_send_msg_to_smc_with_parameter(hwmgr, PPSMC_MSG_LoadUcodes, fw_to_load, NULL);
++	msleep(5000);
++	response = cgs_read_register(hwmgr->device, mmSMC_RESP_0);
++	status = cgs_read_ind_register(hwmgr->device, CGS_IND_REG__SMC,
++				smu_data->soft_regs_start +
++				smum_get_offsetof(hwmgr,
++						  SMU_SoftRegisters,
++						  UcodeLoadStatus));
++	pr_info("SMU-LOAD-BATCH: mask=%08x response=%08x status=%08x\n",
++		fw_to_load, response, status);
++	if (response != 1 || (status & fw_to_load) != fw_to_load) {
++		r = -EIO;
++		goto failed;
++	}
+ 
+ 	r = smu7_check_fw_load_finish(hwmgr, fw_to_load);
+ 	if (!r)
+@@ -425,7 +478,8 @@
+ 	PHM_WRITE_FIELD(hwmgr->device, SMC_IND_ACCESS_CNTL, AUTO_INCREMENT_IND_11, 1);
+ 
+ 	for (; byte_count >= 4; byte_count -= 4)
+-		cgs_write_register(hwmgr->device, mmSMC_IND_DATA_11, *src++);
++		cgs_write_register(hwmgr->device, mmSMC_IND_DATA_11,
++				   le32_to_cpu(*(__le32 *)src++));
+ 
+ 	PHM_WRITE_FIELD(hwmgr->device, SMC_IND_ACCESS_CNTL, AUTO_INCREMENT_IND_11, 0);
+ 

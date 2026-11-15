@@ -1,0 +1,6 @@
+[Unit]
+Description=Light an RX 550 output that was connected after X started
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/rx550-g5/enable-output

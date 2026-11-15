@@ -1,0 +1,40 @@
+# rx550-g5: boot integration for the big-endian RX 550 stack on Arch POWER (Power Mac G5).
+pkgname=rx550-g5
+pkgver=1.0+20261115.1
+pkgrel=1
+pkgdesc='Radeon RX 550 support for big-endian Power Mac G5 (boot integration, driver options, X config)'
+url='https://github.com/parabellum-push/rx550-g5'
+arch=(any)
+license=(MIT)
+depends=(linux-ppc64-rx550g5 linux-firmware-amdgpu 'mesa-rx550g5>=1:26.2.6.rx550g5.3' 'mesa-rx550g5<1:26.2.7'
+         'vulkan-radeon-rx550g5>=1:26.2.6.rx550g5.3' kmod systemd)
+optdepends=('opencl-mesa-rx550g5: OpenCL (Rusticl) on the RX 550'
+            'xorg-xrandr: light an output connected after X started')
+backup=(etc/default/grub.d/90-rx550-g5.cfg)
+install=rx550-g5.install
+source=(modprobe.conf modules-load.conf load-module enable-output update-grub rx550-g5.service
+        rx550-g5-hotplug.service 90-rx550-g5-hotplug.rules 95-rx550-g5-grub.hook 20-rx550-g5.conf grub.cfg README)
+sha256sums=('ce10229564ece2858e06a9b71abb06e98144957e643099026bcccd772cc1ce40'
+            '643c6666102e49a0e848572710e92e104df0ddd45011363e57769497fc629c1e'
+            '5049956e9436fadb6ea9cba2a90b2dab6f98e79b922bee6fd8b771b046c5b02b'
+            '05316289c7dd2da66284b4022e193da8a088d4f78a2292f6bab504d9a377525d'
+            'de0c6547035cd3c4868d3c079a64af516a2a44e7915918019314fee49eed1ee9'
+            '2aba24a15a1dad05eac65b58a717e07fe5112cd439834add0838a3873e8bf10a'
+            '4a1fb0e91da174e8211a8d4d039cbfb073fca69371bfefc921e1f61332067b5d'
+            '0535777042410bb76fb8799bc6c696e34bca2d99a9a576503b5d71b38c7d0fd1'
+            'ecb5a0f12c19bdcba82b1e04bcc09bc4d297d987eceb8123bdac23927746d001'
+            '6230b6ff475985316b8053d380cd285fc243ef9751d039dad56406595ccddb3c'
+            'f039c925e461a3d719d3e28809015fc330d7234ab6db525cc218e9607b564fd0'
+            'ddb5048df1bc7d1308e6eaa293d01a255bceea48d3281f1f7eec729183b5f2e0')
+
+package() {
+  install -Dm644 modprobe.conf "$pkgdir/usr/lib/modprobe.d/rx550-g5.conf"
+  install -Dm644 modules-load.conf "$pkgdir/usr/lib/modules-load.d/rx550-g5.conf"
+  install -Dm755 load-module enable-output update-grub -t "$pkgdir/usr/lib/rx550-g5"
+  install -Dm644 rx550-g5.service rx550-g5-hotplug.service -t "$pkgdir/usr/lib/systemd/system"
+  install -Dm644 90-rx550-g5-hotplug.rules -t "$pkgdir/usr/lib/udev/rules.d"
+  install -Dm644 95-rx550-g5-grub.hook -t "$pkgdir/usr/share/libalpm/hooks"
+  install -Dm644 20-rx550-g5.conf -t "$pkgdir/usr/share/X11/xorg.conf.d"
+  install -Dm644 grub.cfg "$pkgdir/etc/default/grub.d/90-rx550-g5.cfg"
+  install -Dm644 README -t "$pkgdir/usr/share/doc/rx550-g5"
+}

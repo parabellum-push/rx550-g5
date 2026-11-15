@@ -1,0 +1,10 @@
+#!/bin/sh
+# Regenerate grub.cfg if this system boots with GRUB (Power Mac G5: grub.cfg on the HFS bootstrap,
+# mounted at /boot/grub). Does nothing on other boot loaders.
+cfg=/boot/grub/grub.cfg
+if command -v grub-mkconfig >/dev/null && test -e "$cfg"; then
+    grub-mkconfig -o "$cfg" >/dev/null 2>&1 && echo "rx550-g5: $cfg updated" \
+        || echo "rx550-g5: grub-mkconfig failed; pick linux-ppc64-rx550g5 in the boot menu" >&2
+else
+    echo "rx550-g5: GRUB not found; make your boot loader start /boot/vmlinuz-linux-ppc64-rx550g5" >&2
+fi

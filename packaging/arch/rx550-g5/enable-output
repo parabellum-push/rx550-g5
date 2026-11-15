@@ -1,0 +1,16 @@
+#!/bin/sh
+# X leaves an output connected after it started switched off when no RandR client runs
+# (for example at the lxdm greeter). Only acts when no output is lit at all, so it never
+# overrides a mode chosen by the user or by a desktop's display settings.
+for auth in /var/run/lxdm/lxdm-:0.auth /var/lib/lightdm/.Xauthority /run/user/*/gdm/Xauthority; do
+    test -r "$auth" && break
+done
+export DISPLAY=:0 XAUTHORITY="$auth"
+test -r "$XAUTHORITY" || exit 0
+command -v xrandr >/dev/null || exit 0
+sleep 1
+state=$(xrandr 2>/dev/null) || exit 0
+printf '%s\n' "$state" | grep -q '\*' && exit 0
+output=$(printf '%s\n' "$state" | awk '$2 == "connected" { print $1; exit }')
+test -n "$output" || exit 0
+xrandr --output "$output" --auto

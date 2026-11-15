@@ -1,0 +1,4 @@
+{"pkgname":"linux-ppc64-rx550g5","pkgver":"7.2.12.rx550g5-1","pkgdesc":"Linux 7.2.12 (Arch POWER ppc64 config) with big-endian amdgpu patches for the Radeon RX 550 on Power Mac G5",
+ "url":"https://github.com/parabellum-push/linux-rx550-be","license":["GPL-2.0-only"],
+ "depend":["coreutils","initramfs","kmod"],"optdepend":["linux-firmware-amdgpu: RX 550 firmware","wireless-regdb: to set the correct wireless channels of your country"],
+ "provides":["KSMBD-MODULE","WIREGUARD-MODULE"]}

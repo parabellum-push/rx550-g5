@@ -125,10 +125,31 @@ index 3a5662e..278a53b 100644
  	static const GLuint n_rectangles		 = 2;
  	static const GLuint pixel_size			 = 4 * sizeof(GLubyte);
 diff --git a/external/openglcts/modules/gl/gl4cGPUShaderFP64Tests.cpp b/external/openglcts/modules/gl/gl4cGPUShaderFP64Tests.cpp
-index 12a48e6..a40bb9f 100644
+index 12a48e6..6c00cc2 100644
 --- a/external/openglcts/modules/gl/gl4cGPUShaderFP64Tests.cpp
 +++ b/external/openglcts/modules/gl/gl4cGPUShaderFP64Tests.cpp
-@@ -12571,6 +12571,15 @@ static tcu::Matrix<glw::GLdouble, Rows, Cols> outerProduct(const tcu::Vector<glw
+@@ -7318,7 +7318,9 @@ bool GPUShaderFP64Test5::executeIteration(const _test_case& test_case)
+ 			*((int*)base_value_traveller_ptr) = (int)m_base_values[n_base_value];
+ 			break;
+ 		case Utils::VARIABLE_TYPE_UINT:
+-			*((unsigned int*)base_value_traveller_ptr) = (unsigned int)m_base_values[n_base_value];
++			/* float -> unsigned int is undefined for negative values; the test expects ZERO (see below). */
++			*((unsigned int*)base_value_traveller_ptr) =
++				(m_base_values[n_base_value] > 0.0f) ? (unsigned int)m_base_values[n_base_value] : 0u;
+ 			break;
+ 
+ 		default:
+@@ -8045,7 +8047,8 @@ bool GPUShaderFP64Test5::verifyXFBData(const unsigned char* data_ptr, const _tes
+ 					// problematic cases.
+ 					if (expected_value < 0)
+ 					{
+-						expected_value = (unsigned int)m_base_values[n_base_value] + n_swizzled_component;
++						expected_value = ((m_base_values[n_base_value] > 0.0f) ? (unsigned int)m_base_values[n_base_value] : 0u) +
++										 n_swizzled_component;
+ 					}
+ 					expected_value = (unsigned int)expected_value;
+ 				}
+@@ -12571,6 +12574,15 @@ static tcu::Matrix<glw::GLdouble, Rows, Cols> outerProduct(const tcu::Vector<glw
  	return result;
  }
  
@@ -144,7 +165,7 @@ index 12a48e6..a40bb9f 100644
  static glw::GLdouble packDouble2x32(const tcu::UVec2& in)
  {
  	const glw::GLuint buffer[2] = { in[0], in[1] };
-@@ -12578,6 +12587,7 @@ static glw::GLdouble packDouble2x32(const tcu::UVec2& in)
+@@ -12578,6 +12590,7 @@ static glw::GLdouble packDouble2x32(const tcu::UVec2& in)
  	memcpy(&result, buffer, sizeof(result));
  	return result;
  }
@@ -152,7 +173,7 @@ index 12a48e6..a40bb9f 100644
  
  template <typename T>
  static T round(T t)
-@@ -12683,7 +12693,12 @@ static T trunc(T t)
+@@ -12683,7 +12696,12 @@ static T trunc(T t)
  static tcu::UVec2 unpackDouble2x32(const glw::GLdouble& val)
  {
  	glw::GLuint* ptr = (glw::GLuint*)&val;

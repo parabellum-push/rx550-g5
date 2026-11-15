@@ -1,0 +1,58 @@
+Radeon RX 550 on a big-endian Power Mac G5 - Arch POWER (ppc64)
+================================================================
+
+Packages
+--------
+  linux-ppc64-rx550g5
+      Linux 7.2.12 with Arch POWER's linux-ppc64 configuration (64 KiB pages, ELFv2) and the
+      big-endian amdgpu patches (command, MQD and ring byte order, display, VBIOS tables, HDMI/DP
+      info packets, VCE ring wrap, soft recovery) plus g5_cpu_temp. It installs next to
+      linux-ppc64, which stays in the GRUB "Advanced options" menu as a fallback.
+  mesa-rx550g5 vulkan-radeon-rx550g5 vulkan-swrast-rx550g5 vulkan-mesa-layers-rx550g5
+  opencl-mesa-rx550g5
+      Mesa 26.2.6 with the big-endian GFX8 fixes (radeonsi on LLVM, RADV, Rusticl). Each one
+      provides and conflicts with the Arch package of the same base name (mesa, vulkan-radeon, ...),
+      so pacman asks to replace the stock package on install, and an Arch Mesa update does not
+      replace it later.
+  rx550-g5 (this package)
+      Boot integration, driver options and X configuration.
+
+Install
+-------
+  sudo pacman -S --needed linux-firmware-amdgpu
+  sudo pacman -U ./*.pkg.tar.zst        (all files from the release; answer y to replace mesa etc.)
+  sudo reboot
+
+Keep the original graphics card (GeForce 6600 or similar) installed and connected: the G5
+firmware needs it to boot. The RX 550 drives the desktop.
+
+What this package does
+----------------------
+* Makes GRUB start linux-ppc64-rx550g5 by default: /etc/default/grub.d/90-rx550-g5.cfg sets
+  GRUB_TOP_LEVEL, and a pacman hook runs grub-mkconfig after the kernel is installed or updated.
+  Removing the package restores the previous order.
+* rx550-g5.service loads amdgpu after boot and before the display manager. amdgpu is
+  blacklisted for automatic loading so that a GPU problem never stops the machine from booting:
+  if a probe is interrupted (hang, crash, power loss), /var/lib/rx550-g5/probe-in-progress stops
+  further automatic attempts. Delete it to try again.
+* Driver options (/usr/lib/modprobe.d/rx550-g5.conf):
+    runpm=0            keep the GPU powered (hotplug while suspended untested)
+    gpu_recovery=0     full GPU reset fails on the G5; soft recovery still runs
+    lockup_timeout=10000  valid long jobs take more than the 2 s default
+    ttm pages_limit=24576  GPU system memory goes through the 2 GB DART window that SATA,
+                       network, USB and audio share; cap at 1.5 GB (64 KiB pages)
+* X: the modesetting driver with a software cursor for amdgpu devices
+  (/usr/share/X11/xorg.conf.d/20-rx550-g5.conf). Files in /etc/X11/xorg.conf.d take precedence.
+* An output connected after X started is switched on if nothing else is lit.
+
+Recovery
+--------
+* Append rx550.disable=1 to the kernel command line in GRUB (press e) to skip loading amdgpu,
+  or pick linux-ppc64 under "Advanced options".
+* To return to stock: sudo pacman -S mesa vulkan-radeon opencl-mesa (answer y to replace), then
+  sudo pacman -R rx550-g5 linux-ppc64-rx550g5.
+
+Video and OpenCL
+----------------
+VA-API decode (H.264, HEVC 8/10-bit, MPEG-2) and VCE encode (H.264, HEVC). Mesa 26 has no VDPAU.
+OpenCL: opencl-mesa-rx550g5 (Rusticl on radeonsi); fp64 needs RUSTICL_FEATURES=fp64.

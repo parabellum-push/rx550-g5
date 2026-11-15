@@ -1,0 +1,24 @@
+{
+ "pkgdesc": "Mesa Vulkan layers (device-select, overlay, screenshot, anti-lag) from the RX 550 G5 build",
+ "depend": [
+  "libdrm",
+  "libpng",
+  "libxcb",
+  "wayland"
+ ],
+ "provides": [
+  "vulkan-mesa-layers=1:26.2.6",
+  "vulkan-mesa-implicit-layers=1:26.2.6"
+ ],
+ "conflicts": [
+  "vulkan-mesa-layers",
+  "vulkan-mesa-implicit-layers"
+ ],
+ "pkgname": "vulkan-mesa-layers-rx550g5",
+ "pkgbase": "mesa-rx550g5",
+ "pkgver": "1:26.2.6.rx550g5.3-1",
+ "url": "https://github.com/parabellum-push/mesa-rx550-be",
+ "license": [
+  "MIT AND BSD-3-Clause AND SGI-B-2.0"
+ ]
+}

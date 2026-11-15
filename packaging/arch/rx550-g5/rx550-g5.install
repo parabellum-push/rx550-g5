@@ -1,0 +1,18 @@
+post_install() {
+    systemctl enable rx550-g5.service >/dev/null 2>&1 || true
+    # Put the blacklist and options into existing initramfs images (the -rx550g5 one is made by
+    # the mkinitcpio hook in the same transaction).
+    if test -e /boot/initramfs-linux-ppc64-rx550g5.img; then mkinitcpio -p linux-ppc64-rx550g5 >/dev/null 2>&1 || true; fi
+    case "$(uname -r)" in *-rx550g5) ;; *) echo "rx550-g5: reboot to start the linux-ppc64-rx550g5 kernel and the RX 550 driver";; esac
+}
+post_upgrade() {
+    systemctl daemon-reload >/dev/null 2>&1 || true
+}
+pre_remove() {
+    systemctl disable rx550-g5.service >/dev/null 2>&1 || true
+}
+post_remove() {
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    if command -v grub-mkconfig >/dev/null && test -e /boot/grub/grub.cfg; then grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || true; fi
+    rm -rf /var/lib/rx550-g5
+}

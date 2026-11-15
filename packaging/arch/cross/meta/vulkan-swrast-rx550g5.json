@@ -1,0 +1,29 @@
+{
+ "pkgdesc": "Vulkan software rasterizer (lavapipe) from the RX 550 G5 Mesa build",
+ "depend": [
+  "expat",
+  "libdrm",
+  "libx11",
+  "libxcb",
+  "libxshmfence",
+  "llvm-libs",
+  "systemd-libs",
+  "vulkan-icd-loader",
+  "wayland",
+  "zstd"
+ ],
+ "provides": [
+  "vulkan-swrast=1:26.2.6",
+  "vulkan-driver"
+ ],
+ "conflicts": [
+  "vulkan-swrast"
+ ],
+ "pkgname": "vulkan-swrast-rx550g5",
+ "pkgbase": "mesa-rx550g5",
+ "pkgver": "1:26.2.6.rx550g5.3-1",
+ "url": "https://github.com/parabellum-push/mesa-rx550-be",
+ "license": [
+  "MIT AND BSD-3-Clause AND SGI-B-2.0"
+ ]
+}

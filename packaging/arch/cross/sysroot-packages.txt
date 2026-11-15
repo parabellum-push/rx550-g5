@@ -1,0 +1,5 @@
+glibc gcc gcc-libs linux-api-headers libdrm expat zstd zlib xz libx11 libxcb libxau libxdmcp libxext
+libxfixes libxxf86vm libxshmfence libxrandr libxrender xorgproto wayland wayland-protocols libglvnd
+llvm llvm-libs clang compiler-rt spirv-llvm-translator spirv-tools spirv-headers libclc libva libvdpau
+lm_sensors libelf libffi libedit ncurses libxml2 icu libpciaccess vulkan-icd-loader vulkan-headers
+libxv libxmu libxt libsm libice glslang libpng systemd-libs

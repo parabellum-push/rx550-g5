@@ -1,0 +1,6 @@
+#!/bin/sh
+S=${ARCH_SYSROOT:?set ARCH_SYSROOT}
+LIBDIR=$S/usr/lib/pkgconfig:$S/usr/share/pkgconfig
+# libclc variables are target run-time paths: no sysroot prefix.
+case " $* " in *" libclc "*) case "$*" in *--variable*) unset PKG_CONFIG_SYSROOT_DIR; PKG_CONFIG_LIBDIR=$LIBDIR exec /usr/bin/pkg-config "$@";; esac;; esac
+PKG_CONFIG_SYSROOT_DIR=$S PKG_CONFIG_LIBDIR=$LIBDIR exec /usr/bin/pkg-config "$@"

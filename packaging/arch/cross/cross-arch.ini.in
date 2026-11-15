@@ -1,0 +1,17 @@
+[binaries]
+rust = ['rustc', '-Zunstable-options', '--target', '@W@/rust/powerpc64-archpower-linux-gnu.json', '--sysroot', '@W@/rust/sysroot', '-C', 'linker=@W@/xgcc/bin/powerpc64-unknown-linux-gnu-gcc', '-C', 'target-cpu=970']
+c = '@W@/xgcc/bin/powerpc64-unknown-linux-gnu-gcc'
+cpp = '@W@/xgcc/bin/powerpc64-unknown-linux-gnu-g++'
+ar = '@W@/xgcc/bin/powerpc64-unknown-linux-gnu-ar'
+strip = '@W@/xgcc/bin/powerpc64-unknown-linux-gnu-strip'
+pkg-config = '@T@/arch-pkg-config'
+llvm-config = '@T@/llvm-config-arch.py'
+[properties]
+sys_root = '@W@/sysroot'
+bindgen_clang_arguments = ['--target=powerpc64-unknown-linux-gnu', '-mabi=elfv2', '-mcpu=970', '--sysroot=@W@/sysroot', '-nostdinc++', '-isystem', '/usr/powerpc64-linux-gnu/include/c++/13', '-isystem', '/usr/powerpc64-linux-gnu/include/c++/13/powerpc64-linux-gnu', '-isystem', '/usr/powerpc64-linux-gnu/include/c++/13/backward']
+needs_exe_wrapper = true
+[host_machine]
+system = 'linux'
+cpu_family = 'ppc64'
+cpu = 'ppc970'
+endian = 'big'

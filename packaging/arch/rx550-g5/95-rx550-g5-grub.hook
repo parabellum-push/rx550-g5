@@ -1,0 +1,13 @@
+# Runs after 90-mkinitcpio-install.hook has copied the kernel to /boot.
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Target = usr/lib/modules/*-rx550g5/vmlinuz
+Target = etc/default/grub.d/90-rx550-g5.cfg
+
+[Action]
+Description = Updating GRUB menu for the RX 550 kernel...
+When = PostTransaction
+Exec = /usr/lib/rx550-g5/update-grub

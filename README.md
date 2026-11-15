@@ -4,7 +4,7 @@ I am only sharing it since it works on my machine.
 # AMD Radeon RX 550 on a Power Mac G5
 
 Everything needed to run a Polaris GPU (RX 550, GFX8) in a **big-endian** Power Mac G5
-(PPC970MP) under Debian / MintPPC ppc64: OpenGL 4.6, OpenGL ES 3.2, Vulkan 1.3, OpenCL 3.1
+(PPC970MP) under Debian / MintPPC ppc64 and Arch POWER ppc64: OpenGL 4.6, OpenGL ES 3.2, Vulkan 1.3, OpenCL 3.1
 (Rusticl), VA-API decode and VCE encode.
 
 The AMD drivers assume a little-endian CPU. This project fixes that in three places:
@@ -13,13 +13,14 @@ The AMD drivers assume a little-endian CPU. This project fixes that in three pla
 |---|---|
 | [linux-rx550-be](https://github.com/parabellum-push/linux-rx550-be) | amdgpu kernel driver patches (linux 7.2.9) |
 | [mesa-rx550-be](https://github.com/parabellum-push/mesa-rx550-be) | Mesa 26.2.6 (branch `g5-26`) and 24.1.6 (`g5-24`): radeonsi, RADV, Rusticl |
-| this repo | Debian packaging, the `rx550-g5` support package, probes, test runners, CTS patches |
+| this repo | Debian and Arch POWER packaging, the `rx550-g5` support package, probes, test runners, CTS patches |
 
 Ready-made packages are in the [Releases](https://github.com/parabellum-push/rx550-g5/releases).
 
 ## Install (packages)
 
-See [docs/INSTALL.md](docs/INSTALL.md).
+See [docs/INSTALL.md](docs/INSTALL.md) (Debian / MintPPC) or
+[docs/INSTALL-ARCH.md](docs/INSTALL-ARCH.md) (Arch POWER).
 on Debian ppc64 / MintPPC with the AMD firmware available:
 
 ```sh
@@ -32,6 +33,9 @@ sudo reboot
 - `packaging/mesa/`: release build (`build-rel.sh`, meson cross files for building on x86_64) and
   `mkpkgs26.py`, which lays the build out as replacements for the Debian 26.2.6-1 packages with
   identical file lists (plus `mesa-opencl-icd`, following Debian's ppc64el package).
+- `packaging/arch/`: Arch POWER PKGBUILDs (`linux-ppc64-rx550g5`, `mesa-rx550g5` split packages,
+  `rx550-g5`) and `packaging/arch/cross/`, the x86_64 cross build (ELFv2 GCC 16 + Rust target) used
+  for the release packages.
 - `packaging/support/`: the `rx550-g5` package (boot integration, driver options, X configuration,
   hotplug helper, apt pin).
 - `probes/`: small C programs that each check one big-endian behaviour on the device

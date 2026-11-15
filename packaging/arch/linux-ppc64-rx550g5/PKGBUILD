@@ -1,0 +1,67 @@
+# Arch POWER (ppc64, big-endian, ELFv2) kernel with the big-endian amdgpu patches for the
+# Radeon RX 550 (Polaris 11) on a Power Mac G5. Config = Arch POWER linux-ppc64 7.2.12 config,
+# only CONFIG_LOCALVERSION changed. Installs next to linux-ppc64 (separate pkgbase).
+# The release package was cross-built on x86_64 (packaging/arch/cross/build-kernel.sh) with the
+# same sources and config; this PKGBUILD is the native recipe.
+
+pkgbase=linux-ppc64-rx550g5
+pkgname=("$pkgbase")
+_kver=7.2.12
+pkgver=${_kver}.rx550g5
+pkgrel=1
+pkgdesc='Linux (Arch POWER ppc64 config) with big-endian amdgpu patches for the Radeon RX 550 on Power Mac G5'
+url='https://github.com/parabellum-push/linux-rx550-be'
+arch=(powerpc64)
+license=(GPL-2.0-only)
+makedepends=(bc cpio gettext libelf pahole perl python tar xz zstd)
+options=(!debug !strip)
+source=(
+  "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-${_kver}.tar.xz"
+  debian-radeon-amdgpu-firmware-is-required-for-drm-and-kms-on-r600-onward.patch
+  0001-amdgpu.patch
+  0002-display.patch
+  0003-powerplay.patch
+  0004-macintosh.patch
+  config
+)
+sha256sums=('bb18468a8dc8978aa00caa6446e753f7b6da3fee56b6b7f38b16f9430ba02d4f'
+            '0ea72c198925c98d32c19ad5ed0ba8c69b3d15b2c7eb54f9b34c6d013fea2076'
+            '8ad1f456511524d2d4d19f49e6be55c8101d73e7e56e9bc233ab979ed9bbafef'
+            '90473c5a634d1b4c7630ee98a036ddb2e72d94278f27e2cb620a70446279c6f3'
+            '317cab8666c673619e547f11389db18a6ee41a9db95d51a884c49ecc65592360'
+            '8ba8f3045a6ec87e502e1c450d102b92262b75a72819cd0d26d82036e9cd6669'
+            'eba2389d652603556b81434971bc875c47b85f455e5d90c1209f9d090caef19c')
+
+prepare() {
+  cd linux-${_kver}
+  local p
+  for p in debian-radeon-amdgpu-firmware-is-required-for-drm-and-kms-on-r600-onward.patch \
+           0001-amdgpu.patch 0002-display.patch 0003-powerplay.patch 0004-macintosh.patch; do
+    echo "Applying $p"
+    patch -Np1 < "../$p"
+  done
+  cp ../config .config
+  make olddefconfig
+  make -s kernelrelease > version
+}
+
+build() {
+  cd linux-${_kver}
+  make vmlinux modules
+}
+
+package_linux-ppc64-rx550g5() {
+  depends=(coreutils initramfs kmod)
+  optdepends=('linux-firmware-amdgpu: RX 550 firmware'
+              'wireless-regdb: to set the correct wireless channels of your country')
+  provides=(KSMBD-MODULE WIREGUARD-MODULE)
+
+  cd linux-${_kver}
+  local kernver="$(<version)"
+  local modulesdir="$pkgdir/usr/lib/modules/$kernver"
+  # GRUB on the G5 loads the ELF vmlinux, like linux-ppc64's vmlinuz.
+  install -Dm644 vmlinux "$modulesdir/vmlinuz"
+  echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
+  ZSTD_CLEVEL=19 make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 DEPMOD=/doesnt/exist modules_install
+  rm -f "$modulesdir"/build "$modulesdir"/source
+}

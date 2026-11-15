@@ -1,0 +1,44 @@
+{
+ "pkgdesc": "Mesa with big-endian fixes for the Radeon RX 550 (GFX8) on Power Mac G5 (GL, EGL, GBM, VA-API)",
+ "depend": [
+  "expat",
+  "libdrm",
+  "libelf",
+  "libglvnd",
+  "libx11",
+  "libxcb",
+  "libxext",
+  "libxshmfence",
+  "libxxf86vm",
+  "llvm-libs",
+  "lm_sensors",
+  "spirv-tools",
+  "wayland",
+  "zlib",
+  "zstd"
+ ],
+ "optdepend": [
+  "opengl-man-pages: for the OpenGL API man pages"
+ ],
+ "provides": [
+  "mesa=1:26.2.6",
+  "libva-mesa-driver=1:26.2.6",
+  "mesa-vdpau=1:26.2.6",
+  "mesa-libgl=1:26.2.6",
+  "libva-driver",
+  "opengl-driver"
+ ],
+ "conflicts": [
+  "mesa",
+  "libva-mesa-driver",
+  "mesa-vdpau",
+  "mesa-libgl"
+ ],
+ "pkgname": "mesa-rx550g5",
+ "pkgbase": "mesa-rx550g5",
+ "pkgver": "1:26.2.6.rx550g5.3-1",
+ "url": "https://github.com/parabellum-push/mesa-rx550-be",
+ "license": [
+  "MIT AND BSD-3-Clause AND SGI-B-2.0"
+ ]
+}
