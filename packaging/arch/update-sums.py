@@ -2,7 +2,7 @@
 """Fill sha256sums=() of each PKGBUILD here from its local source files (URLs keep their sum, git = SKIP)."""
 import hashlib, os, re
 here = os.path.dirname(os.path.abspath(__file__))
-for d in ('linux-ppc64-rx550g5', 'mesa-rx550g5', 'rx550-g5'):
+for d in ('linux-ppc64-rx550g5', 'mesa-rx550g5', 'rx550-g5', 'rx550-g5-kde'):
     p = os.path.join(here, d, 'PKGBUILD'); s = open(p).read()
     src = re.search(r'^source=\((.*?)\)', s, re.S | re.M).group(1)
     items = re.findall(r'"[^"]*"|\S+', src)

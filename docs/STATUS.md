@@ -49,6 +49,49 @@ machine.
 - Rusticl prints "Patched Mesa libclc not detected" with Debian's libclc; that is the same on every
   Debian architecture.
 
+## Arch POWER (release `rx550g5.3-arch1`)
+
+Hardware: Power Mac G5 Quad (PowerMac11,2, 2x PPC970MP dual core), same RX 550, Arch POWER
+`powerpc64` (ELFv2, 64 KiB pages), KDE Plasma 6.7.5. Packages: kernel `linux-ppc64-rx550g5`
+7.2.12, Mesa `26.2.6.rx550g5.3` (same driver source as the Debian release plus four Arch patches),
+`rx550-g5 1.0+20261115.2`, optional `rx550-g5-kde 1.0+20261115.1`. Built on x86_64 with the cross
+toolchain in `packaging/arch/cross/`.
+
+| Suite | Cases | Result |
+|---|---|---|
+| GL CTS GLES2 / GLES3 / GLES31 / KHR-GL46 | 2,040 / 3,819 / 2,977 / 9,051 | 0 regressions vs Debian `rx550g5.3` |
+| Vulkan CTS stratified sample + mutable | 54,968 + 8,592 | 0 regressions |
+| Desktop | KDE Plasma Wayland and X11, SDDM | full desktop, correct colours and cursor (checked on screen) |
+
+The three failures (Vulkan `info.*_extensions` x2, one GLES3 shader compile case) also fail in the
+Debian baseline.
+
+Found on Arch and fixed in these packages:
+
+- Mesa EGL/Wayland used native-endian 8-bit RGB formats; on big-endian every Wayland EGL client,
+  plasmashell included, crashed in `eglSwapBuffers` (Mesa patch 0004).
+- The DRM core refused `ADDFB2` on big-endian, so KWin fell back to legacy `ADDFB`, which registers
+  every buffer as XRGB8888: wrong colours for 10-bit frames and a blue ARGB cursor (kernel patch 0005).
+- The fbdev emulation reported little-endian channel offsets wrongly on big-endian: yellow text console
+  (kernel patch 0006).
+- RADV host-pointer import and sparse-image alignment assumed 4 KiB pages (Mesa patches 0002, 0003).
+- The TTM page limit that keeps GPU memory inside the 2 GB DART window is counted in 64 KiB pages
+  (`pages_limit=24576`).
+- Suspend: the G5 does not wake from s2idle, and Plasma's idle suspend looked like a hang; `rx550-g5`
+  disables suspend and hibernation.
+
+Not fixed in our packages (KDE bugs, patches in `packaging/arch/kde/` for KDE):
+
+- plasma-workspace 6.7.5 reads the 32-bit X11 `_KDE_SCREEN_INDEX` property as one byte: black Plasma
+  X11 desktop on big-endian. The optional `rx550-g5-kde` package fixes the installed library.
+- KWin's legacy `ADDFB` fallback ignores the buffer's real format (not reached with our kernel; the
+  patch is not compile-tested).
+
+Known issues on Arch:
+
+- An unclean shutdown can leave the HFS `/boot/grub` partition marked dirty, and Linux then mounts it
+  read-only; `hfsprogs` fsck cannot check plain HFS on big-endian.
+
 ## Upstream candidates (not big-endian specific)
 
 - `ac_nir_to_llvm`: scratch loads/stores without their alignment land in the neighbouring lane on GFX6-8.

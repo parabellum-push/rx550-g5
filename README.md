@@ -34,8 +34,9 @@ sudo reboot
   `mkpkgs26.py`, which lays the build out as replacements for the Debian 26.2.6-1 packages with
   identical file lists (plus `mesa-opencl-icd`, following Debian's ppc64el package).
 - `packaging/arch/`: Arch POWER PKGBUILDs (`linux-ppc64-rx550g5`, `mesa-rx550g5` split packages,
-  `rx550-g5`) and `packaging/arch/cross/`, the x86_64 cross build (ELFv2 GCC 16 + Rust target) used
-  for the release packages.
+  `rx550-g5`, the optional `rx550-g5-kde`) and `packaging/arch/cross/`, the x86_64 cross build
+  (ELFv2 GCC 16 + Rust target) used for the release packages. `packaging/arch/kde/` holds the KDE
+  big-endian patches meant for KDE upstream.
 - `packaging/support/`: the `rx550-g5` package (boot integration, driver options, X configuration,
   hotplug helper, apt pin).
 - `probes/`: small C programs that each check one big-endian behaviour on the device
@@ -44,7 +45,8 @@ sudo reboot
   PC-side offline OpenCL compiler (`test-runners/ocl/offline`) that moves kernel compilation off the G5.
 - `cts-patches/`: fixes for big-endian bugs **in the test suites themselves** (VK-GL-CTS,
   OpenCL-CTS), with the upstream commits they apply to.
-- `docs/`: [STATUS](docs/STATUS.md) (what works, test results, known issues), [INSTALL](docs/INSTALL.md).
+- `docs/`: [STATUS](docs/STATUS.md) (what works, test results, known issues), [INSTALL](docs/INSTALL.md),
+  [INSTALL-ARCH](docs/INSTALL-ARCH.md).
 
 ## Status in one paragraph
 

@@ -22,6 +22,8 @@ source=(
   0002-display.patch
   0003-powerplay.patch
   0004-macintosh.patch
+  0005-drm-amdgpu-allow-addfb2-on-big-endian.patch
+  0006-drm-fbdev-le-framebuffers-on-big-endian.patch
   config
 )
 sha256sums=('bb18468a8dc8978aa00caa6446e753f7b6da3fee56b6b7f38b16f9430ba02d4f'
@@ -30,13 +32,16 @@ sha256sums=('bb18468a8dc8978aa00caa6446e753f7b6da3fee56b6b7f38b16f9430ba02d4f'
             '90473c5a634d1b4c7630ee98a036ddb2e72d94278f27e2cb620a70446279c6f3'
             '317cab8666c673619e547f11389db18a6ee41a9db95d51a884c49ecc65592360'
             '8ba8f3045a6ec87e502e1c450d102b92262b75a72819cd0d26d82036e9cd6669'
+            'c0d0bff3480a4bdc6d75bae3347051789f54b5809f7ee75921c53d909d943c9c'
+            '86c62fdeb38284fcd014eb013f1827a64fb13bdc51df4fe9a0c3ae8168b4949d'
             'eba2389d652603556b81434971bc875c47b85f455e5d90c1209f9d090caef19c')
 
 prepare() {
   cd linux-${_kver}
   local p
   for p in debian-radeon-amdgpu-firmware-is-required-for-drm-and-kms-on-r600-onward.patch \
-           0001-amdgpu.patch 0002-display.patch 0003-powerplay.patch 0004-macintosh.patch; do
+           0001-amdgpu.patch 0002-display.patch 0003-powerplay.patch 0004-macintosh.patch \
+           0005-drm-amdgpu-allow-addfb2-on-big-endian.patch 0006-drm-fbdev-le-framebuffers-on-big-endian.patch; do
     echo "Applying $p"
     patch -Np1 < "../$p"
   done

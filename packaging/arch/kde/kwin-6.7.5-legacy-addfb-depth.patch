@@ -1,0 +1,43 @@
+From: rx550-g5
+Subject: [PATCH] backends/drm: pick the legacy ADDFB depth from the buffer format
+
+When ADDFB2 returns EOPNOTSUPP (big-endian kernels without
+quirk_addfb_prefer_host_byte_order, e.g. amdgpu on PowerPC), KWin fell back to
+drmModeAddFB(depth 24, bpp 32) for every buffer. 10-bit (AR30/AB30) scanout buffers were then
+shown as XRGB8888 (garbled colours) and the ARGB cursor lost its alpha. Map XRGB8888/ARGB8888/
+XRGB2101010 to their legacy depths and fail for formats ADDFB cannot express, so the format
+selection moves on to a usable one.
+
+--- ka/src/backends/drm/drm_gpu.cpp
++++ kb/src/backends/drm/drm_gpu.cpp
+@@ -1003,11 +1003,28 @@
+                             attributes->offset.data(),
+                             &framebufferId,
+                             0);
+-        if (ret == -EOPNOTSUPP && attributes->planeCount == 1) {
++        // Legacy ADDFB can only express a few formats through depth/bpp. Big-endian kernels
++        // without ADDFB2 get here for every buffer, so never label 10-bit or alpha buffers as
++        // XRGB8888 (that showed garbled colours and a cursor without alpha).
++        int legacyDepth = 0;
++        switch (attributes->format) {
++        case DRM_FORMAT_XRGB8888:
++            legacyDepth = 24;
++            break;
++        case DRM_FORMAT_ARGB8888:
++            legacyDepth = 32;
++            break;
++        case DRM_FORMAT_XRGB2101010:
++            legacyDepth = 30;
++            break;
++        default:
++            break;
++        }
++        if (ret == -EOPNOTSUPP && attributes->planeCount == 1 && legacyDepth != 0) {
+             ret = drmModeAddFB(m_fd,
+                                attributes->width,
+                                attributes->height,
+-                               24, 32,
++                               legacyDepth, 32,
+                                attributes->pitch[0],
+                                handles[0],
+                                &framebufferId);

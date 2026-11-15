@@ -1,0 +1,11 @@
+# rx550-g5-kde: re-apply the big-endian fix after plasma-workspace installs or upgrades libkworkspace6.
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Target = usr/lib/libkworkspace6.so.*
+
+[Action]
+Description = Fixing plasma-workspace for big-endian (rx550-g5-kde)...
+When = PostTransaction
+Exec = /usr/lib/rx550-g5/kde-be-fix

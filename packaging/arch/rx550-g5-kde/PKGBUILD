@@ -1,0 +1,21 @@
+# rx550-g5-kde: optional KDE Plasma big-endian fix for the RX 550 Power Mac G5 stack (Arch POWER).
+pkgname=rx550-g5-kde
+pkgver=1.0+20261115.1
+pkgrel=1
+pkgdesc='Optional: KDE Plasma big-endian fix for the RX 550 Power Mac G5 (plasma-workspace X11 screen order)'
+url='https://github.com/parabellum-push/rx550-g5'
+arch=(any)
+license=(MIT)
+depends=(plasma-workspace python)
+optdepends=('rx550-g5: the RX 550 driver stack')
+install=rx550-g5-kde.install
+source=(kde-be-fix 96-rx550-g5-kde.hook README)
+sha256sums=('e4f84bc87a191948e02754df60f52d35672b0d6a7aa6aea9635b273a5ec18477'
+            '9ae42654e3914528a62faf8a1d05e24f4e04f9e24f3a2c10b92780ebb31e2d8a'
+            '0923dd448ab3b29ed855cae45938f9e0b4e8471a47e8d28a403713a47a8f035f')
+
+package() {
+  install -Dm755 kde-be-fix -t "$pkgdir/usr/lib/rx550-g5"
+  install -Dm644 96-rx550-g5-kde.hook -t "$pkgdir/usr/share/libalpm/hooks"
+  install -Dm644 README -t "$pkgdir/usr/share/doc/rx550-g5-kde"
+}

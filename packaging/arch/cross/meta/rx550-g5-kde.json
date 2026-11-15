@@ -1,0 +1,3 @@
+{"pkgname":"rx550-g5-kde","pkgver":"1.0+20261115.1-1","arch":"any","pkgdesc":"Optional: KDE Plasma big-endian fix for the RX 550 Power Mac G5 (plasma-workspace X11 screen order)",
+ "url":"https://github.com/parabellum-push/rx550-g5","license":["MIT"],
+ "depend":["plasma-workspace","python"],"optdepend":["rx550-g5: the RX 550 driver stack"]}

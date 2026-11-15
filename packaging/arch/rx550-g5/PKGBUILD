@@ -1,6 +1,6 @@
 # rx550-g5: boot integration for the big-endian RX 550 stack on Arch POWER (Power Mac G5).
 pkgname=rx550-g5
-pkgver=1.0+20261115.1
+pkgver=1.0+20261115.2
 pkgrel=1
 pkgdesc='Radeon RX 550 support for big-endian Power Mac G5 (boot integration, driver options, X config)'
 url='https://github.com/parabellum-push/rx550-g5'
@@ -13,7 +13,8 @@ optdepends=('opencl-mesa-rx550g5: OpenCL (Rusticl) on the RX 550'
 backup=(etc/default/grub.d/90-rx550-g5.cfg)
 install=rx550-g5.install
 source=(modprobe.conf modules-load.conf load-module enable-output update-grub rx550-g5.service
-        rx550-g5-hotplug.service 90-rx550-g5-hotplug.rules 95-rx550-g5-grub.hook 20-rx550-g5.conf grub.cfg README)
+        rx550-g5-hotplug.service 90-rx550-g5-hotplug.rules 95-rx550-g5-grub.hook 20-rx550-g5.conf grub.cfg README
+        no-suspend.conf)
 sha256sums=('ce10229564ece2858e06a9b71abb06e98144957e643099026bcccd772cc1ce40'
             '643c6666102e49a0e848572710e92e104df0ddd45011363e57769497fc629c1e'
             '5049956e9436fadb6ea9cba2a90b2dab6f98e79b922bee6fd8b771b046c5b02b'
@@ -25,7 +26,8 @@ sha256sums=('ce10229564ece2858e06a9b71abb06e98144957e643099026bcccd772cc1ce40'
             'ecb5a0f12c19bdcba82b1e04bcc09bc4d297d987eceb8123bdac23927746d001'
             '6230b6ff475985316b8053d380cd285fc243ef9751d039dad56406595ccddb3c'
             'f039c925e461a3d719d3e28809015fc330d7234ab6db525cc218e9607b564fd0'
-            'ddb5048df1bc7d1308e6eaa293d01a255bceea48d3281f1f7eec729183b5f2e0')
+            '29d38bd64eaf4d0ba0adb5828ed5d779d65a90b975f12f5cb720ce5cf7af67cb'
+            '764cfe4e8ee1873c73f844ecbd516ecaff8b618baeb0f8a58a9734e79a010292')
 
 package() {
   install -Dm644 modprobe.conf "$pkgdir/usr/lib/modprobe.d/rx550-g5.conf"
@@ -37,4 +39,5 @@ package() {
   install -Dm644 20-rx550-g5.conf -t "$pkgdir/usr/share/X11/xorg.conf.d"
   install -Dm644 grub.cfg "$pkgdir/etc/default/grub.d/90-rx550-g5.cfg"
   install -Dm644 README -t "$pkgdir/usr/share/doc/rx550-g5"
+  install -Dm644 no-suspend.conf "$pkgdir/usr/lib/systemd/sleep.conf.d/90-rx550-g5-no-suspend.conf"
 }

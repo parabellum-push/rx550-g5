@@ -6,7 +6,8 @@ mkdir -p $K && cd $K
 [ -f linux-7.2.12.tar.xz ] || curl -fLO https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.12.tar.xz
 rm -rf linux-7.2.12 && tar xf linux-7.2.12.tar.xz && cd linux-7.2.12
 for p in debian-radeon-amdgpu-firmware-is-required-for-drm-and-kms-on-r600-onward.patch \
-         0001-amdgpu.patch 0002-display.patch 0003-powerplay.patch 0004-macintosh.patch; do
+         0001-amdgpu.patch 0002-display.patch 0003-powerplay.patch 0004-macintosh.patch \
+         0005-drm-amdgpu-allow-addfb2-on-big-endian.patch 0006-drm-fbdev-le-framebuffers-on-big-endian.patch; do
   patch -Np1 < $H/$p
 done
 cp $H/config .config

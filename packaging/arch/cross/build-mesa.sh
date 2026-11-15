@@ -9,7 +9,7 @@ sed -e "s#@W@#$W#g" -e "s#@T@#$T#g" $T/cross-arch.ini.in > $W/cross-arch.ini
 mkdir -p $M && cd $M
 rm -rf src && git clone --depth 1 -b 26.2.6-1+rx550g5.3 https://github.com/parabellum-push/mesa-rx550-be.git src
 echo "26.2.6-1.rx550g5.3" > src/VERSION
-(cd src && patch -Np1 < $H/0001-glibc-c11-threads-casts.patch)
+(cd src && patch -Np1 < $H/0001-glibc-c11-threads-casts.patch && patch -Np1 < $H/0002-radv-host-pointer-alignment-page-size.patch && patch -Np1 < $H/0003-radv-sparse-image-alignment-page-size.patch && patch -Np1 < $H/0004-egl-wayland-dri-byte-layout-formats-on-big-endian.patch)
 # Arch POWER makepkg.conf CFLAGS (no -fno-plt: inline-PLT __tls_get_addr calls broke TLS), -mcpu=970
 F="-mcpu=970 -O2 -pipe -fexceptions -Wp,-D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security -fno-omit-frame-pointer -g1"
 LF="-Wl,-O1 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now"

@@ -1,0 +1,49 @@
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+@@ -5211,6 +5211,13 @@
+ 		adev_to_drm(adev)->mode_config.prefer_shadow = 1;
+ 	/* indicates support for immediate flip */
+ 	adev_to_drm(adev)->mode_config.async_page_flip = true;
++#ifdef __BIG_ENDIAN
++	/* Scanout buffers are rendered by the GPU in the little-endian DRM layouts, which is what
++	 * ADDFB2 fourccs describe. Without this, compositors fall back to legacy ADDFB with a
++	 * guessed depth and show 10-bit or ARGB buffers as XRGB8888 (KWin: garbled colours).
++	 */
++	adev_to_drm(adev)->mode_config.allow_addfb2_le_formats_on_be = true;
++#endif
+ 
+ 	drm_atomic_private_obj_init(adev_to_drm(adev),
+ 				    &adev->dm.atomic_obj,
+--- a/drivers/gpu/drm/drm_framebuffer.c
++++ b/drivers/gpu/drm/drm_framebuffer.c
+@@ -355,7 +355,8 @@
+ 			  void *data, struct drm_file *file_priv)
+ {
+ #ifdef __BIG_ENDIAN
+-	if (!dev->mode_config.quirk_addfb_prefer_host_byte_order) {
++	if (!dev->mode_config.quirk_addfb_prefer_host_byte_order &&
++	    !dev->mode_config.allow_addfb2_le_formats_on_be) {
+ 		/*
+ 		 * Drivers must set the
+ 		 * quirk_addfb_prefer_host_byte_order quirk to make
+--- a/include/drm/drm_mode_config.h
++++ b/include/drm/drm_mode_config.h
+@@ -935,6 +935,18 @@
+ 	bool quirk_addfb_prefer_host_byte_order;
+ 
+ 	/**
++	 * @allow_addfb2_le_formats_on_be:
++	 *
++	 * On big-endian hosts the ADDFB2 ioctl is normally refused unless
++	 * @quirk_addfb_prefer_host_byte_order is set, because legacy ADDFB maps
++	 * depth/bpp to little-endian fourccs there. A driver whose framebuffers
++	 * really are in the little-endian DRM layouts (for example GPU-rendered
++	 * buffers on amdgpu) can set this to accept ADDFB2 with the standard
++	 * fourccs while leaving legacy ADDFB unchanged.
++	 */
++	bool allow_addfb2_le_formats_on_be;
++
++	/**
+ 	 * @async_page_flip: Does this device support async flips on the primary
+ 	 * plane?
+ 	 */

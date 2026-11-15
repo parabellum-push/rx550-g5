@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""rx550-g5-kde: fix plasma-workspace's big-endian X11 screen-order bug in libkworkspace6.
+
+KDE's OutputOrderWatcher (libkworkspace/outputorderwatcher.cpp) does
+    const uint32_t order = *xcb_randr_get_output_property_data(reply);
+on a uint8_t *, so it reads one byte of the 32-bit _KDE_SCREEN_INDEX. On big-endian that byte is 0,
+every output counts as disabled and Plasma (X11) shows a black desktop. The compiled code is
+    lbz rT,0(r3)      ; after the call, load ONE byte
+    cmpwi rT,0
+and the fix is to load the whole word instead:
+    lwz rT,0(r3)
+The instruction is found by pattern (preceded by the type/format/num_items checks and the call,
+followed by cmpwi rT,0), never by a fixed offset. Exactly one match is required, otherwise nothing is
+changed. The source-level patch for KDE is in the rx550-g5 repository (packaging/arch/kde/).
+
+usage: kde-be-fix [--revert] [--check]
+"""
+import glob, os, struct, sys, tempfile
+
+LIBS = sorted(glob.glob("/usr/lib/libkworkspace6.so.6.*"))
+LBZ, LWZ = 34, 32
+
+
+def word(d, o):
+    return struct.unpack(">I", d[o:o + 4])[0]
+
+
+def find(d, want_op):
+    hits = []
+    for o in range(0x20, len(d) - 8, 4):
+        w = word(d, o)
+        if w >> 26 != want_op or (w >> 16) & 0x1f != 3 or w & 0xffff:   # rT,0(r3)
+            continue
+        rt = (w >> 21) & 0x1f
+        if word(d, o + 4) != (11 << 26 | rt << 16):                       # cmpwi rT,0
+            continue
+        if word(d, o - 4) != 0xe8410018 or word(d, o - 8) >> 26 != 18:    # ld r2,24(r1) after bl
+            continue
+        # the num_items == 1 check just before the call: cmpwi r9,1 ; bne
+        if word(d, o - 16) != 0x2c090001 or word(d, o - 12) >> 26 != 16:
+            continue
+        hits.append(o)
+    return hits
+
+
+def main():
+    revert = "--revert" in sys.argv
+    check = "--check" in sys.argv
+    if not LIBS:
+        print("rx550-g5-kde: libkworkspace6 not installed, nothing to do")
+        return 0
+    if sys.byteorder != "big":
+        print("rx550-g5-kde: little-endian host, nothing to do")
+        return 0
+    rc = 0
+    for lib in LIBS:
+        if os.path.islink(lib):
+            continue
+        d = bytearray(open(lib, "rb").read())
+        bad, good = find(d, LBZ), find(d, LWZ)
+        name = os.path.basename(lib)
+        if check:
+            state = "fixed" if good and not bad else "NOT fixed" if bad else "pattern not found"
+            print(f"rx550-g5-kde: {name}: {state}")
+            continue
+        src, dst, todo = (good, LBZ, "reverted") if revert else (bad, LWZ, "fixed")
+        if not src:
+            already = bad if revert else good
+            print(f"rx550-g5-kde: {name}: " + ("already in place" if already else
+                  "pattern not found (KDE may have fixed the bug, or the code changed): not modified"))
+            continue
+        if len(src) != 1:
+            print(f"rx550-g5-kde: {name}: {len(src)} matches, expected 1: not modified", file=sys.stderr)
+            rc = 1
+            continue
+        o = src[0]
+        w = word(d, o)
+        d[o:o + 4] = struct.pack(">I", (w & 0x03ffffff) | dst << 26)
+        st = os.stat(lib)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(lib), prefix=".kde-be-fix.")
+        with os.fdopen(fd, "wb") as f:
+            f.write(d)
+        os.chmod(tmp, st.st_mode & 0o7777)
+        os.chown(tmp, st.st_uid, st.st_gid)
+        os.replace(tmp, lib)
+        print(f"rx550-g5-kde: {name}: {todo} (offset 0x{o:x})")
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())

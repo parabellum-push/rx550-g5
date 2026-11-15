@@ -1,0 +1,26 @@
+rx550-g5-kde: KDE Plasma fixes for big-endian Power Mac G5 (optional)
+======================================================================
+
+KDE Plasma 6.7.5 on a big-endian G5 needs fixes in three places. Two are in the rx550-g5 kernel
+and Mesa packages; this optional package carries the one that lives in KDE itself:
+
+* plasma-workspace (Plasma X11 only): OutputOrderWatcher reads the 32-bit X11 _KDE_SCREEN_INDEX
+  property as a single byte. On big-endian that byte is 0, Plasma thinks every screen is disabled
+  and plasmashell shows a black desktop with only a mouse pointer.
+
+This package does not replace plasma-workspace. A pacman hook (96-rx550-g5-kde.hook) runs
+/usr/lib/rx550-g5/kde-be-fix after every plasma-workspace install or upgrade; it finds the one
+"load byte" instruction behind the bug in libkworkspace6.so by pattern and turns it into "load word"
+(4 bytes changed). If the pattern is not found exactly once (for example after KDE fixes the bug)
+nothing is changed. Removing the package reverts the change. pacman -Qkk plasma-workspace reports
+libkworkspace6.so as modified while the fix is in place; that is expected.
+
+  /usr/lib/rx550-g5/kde-be-fix --check     show the state
+  /usr/lib/rx550-g5/kde-be-fix --revert    undo by hand
+
+Not needed for Plasma (Wayland), the default session: there plasmashell gets the screen order over
+Wayland. Wayland on the G5 needs the rx550-g5 kernel (ADDFB2 on big-endian) and Mesa (EGL/Wayland
+formats), which the main packages provide.
+
+Source patches for KDE (plasma-workspace, and a KWin fallback that is not reached with the
+rx550-g5 kernel): https://github.com/parabellum-push/rx550-g5/tree/main/packaging/arch/kde

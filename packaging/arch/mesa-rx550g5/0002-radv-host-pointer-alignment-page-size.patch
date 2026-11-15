@@ -1,0 +1,19 @@
+radv: report the kernel page size as minImportedHostPointerAlignment
+
+amdgpu_gem_userptr_ioctl rejects addresses/sizes not aligned to PAGE_SIZE. RADV reported 4096,
+so VK_EXT_external_memory_host imports failed (VK_ERROR_INVALID_EXTERNAL_HANDLE) on kernels
+with 64 KiB pages such as Arch POWER ppc64. No change with 4 KiB pages.
+
+--- a/src/amd/vulkan/radv_physical_device.c
++++ b/src/amd/vulkan/radv_physical_device.c
+@@ -2092,7 +2092,9 @@
+       .maxDiscardRectangles = MAX_DISCARD_RECTANGLES,
+ 
+       /* VK_EXT_external_memory_host */
+-      .minImportedHostPointerAlignment = 4096,
++      /* The kernel only imports userptr ranges aligned to its page size (64 KiB on some ppc64/arm64
++       * kernels); gart_page_size is max(PAGE_SIZE, 4096). */
++      .minImportedHostPointerAlignment = MAX2(4096, pdev->info.gart_page_size),
+ 
+       /* VK_AMD_shader_core_properties */
+       /* Shader engines. */

@@ -1,0 +1,35 @@
+From: rx550-g5
+Subject: [PATCH] libkworkspace: read _KDE_SCREEN_INDEX as a 32-bit value (fix big-endian)
+
+OutputOrderWatcher (X11) dereferenced the uint8_t * returned by
+xcb_randr_get_output_property_data(), reading only the first byte of the format-32
+_KDE_SCREEN_INDEX value. On big-endian hosts that is the high byte (0), so every output
+counted as disabled, the output order was empty and plasmashell created no desktop or panel
+views (black screen with a cursor on Plasma X11, ppc64 Power Mac G5).
+
+xcb returns format-32 property data in host byte order; copy the full 32-bit value.
+
+--- a/libkworkspace/outputorderwatcher.cpp
++++ b/libkworkspace/outputorderwatcher.cpp
+@@ -7,6 +7,8 @@
+ 
+ #include "outputorderwatcher.h"
+ 
++#include <cstring>
++
+ #include <config-X11.h>
+ 
+ #include <algorithm>
+@@ -264,7 +266,11 @@
+             return;
+         }
+ 
+-        const uint32_t order = *xcb_randr_get_output_property_data(orderReply.data());
++        // xcb_randr_get_output_property_data() returns uint8_t *: dereferencing it reads only the
++        // first byte of the format-32 value, which is the high byte on big-endian hosts (always 0
++        // there, so every output looked disabled and plasmashell created no desktop or panel).
++        uint32_t order;
++        memcpy(&order, xcb_randr_get_output_property_data(orderReply.data()), sizeof(order));
+ 
+         if (order > 0) { // 0 is the special case for disabled, so we ignore it
+             orderMap.emplace_back(order,

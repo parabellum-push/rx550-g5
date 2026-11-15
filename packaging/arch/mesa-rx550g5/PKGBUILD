@@ -25,15 +25,24 @@ makedepends=(clang expat git glslang libclc libdrm libelf libglvnd libpng libva 
 options=(!lto)
 source=("mesa::git+https://github.com/parabellum-push/mesa-rx550-be.git#tag=${_tag}"
         0001-glibc-c11-threads-casts.patch
+        0002-radv-host-pointer-alignment-page-size.patch
+        0003-radv-sparse-image-alignment-page-size.patch
+        0004-egl-wayland-dri-byte-layout-formats-on-big-endian.patch
         README.rx550-g5)
 sha256sums=('SKIP'
             '2bd30d45c3c81a0a1b5e0fb93f45af5c2d7844a73da341798dd7bba8ff9468a2'
-            'f07993a43a72ce6609d3f66dbde4e75e471ac086269188a665464df28c1090dc')
+            'a31ff6fc57bda0a8f64a30cb1e5a146e0d3e6b3ce9c9322ae287b90ad07fbceb'
+            '1102db560a9556369195065bcc192b4166c646a9d93865ee5f270e4ed3b42d81'
+            '6e601b7983d03ef61501c70a12527959bc7d3ca87312d449c6d9fa5005466bf2'
+            'e8993205cc338d31ee8416868fee1443577ba9d4ac87a5a07cc5992f3d2d28f4')
 
 prepare() {
   cd mesa
   echo "26.2.6-1.rx550g5.3" > VERSION
   patch -Np1 < ../0001-glibc-c11-threads-casts.patch
+  patch -Np1 < ../0002-radv-host-pointer-alignment-page-size.patch
+  patch -Np1 < ../0003-radv-sparse-image-alignment-page-size.patch
+  patch -Np1 < ../0004-egl-wayland-dri-byte-layout-formats-on-big-endian.patch
 }
 
 build() {

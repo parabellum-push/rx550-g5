@@ -6,7 +6,9 @@ Packages
   linux-ppc64-rx550g5
       Linux 7.2.12 with Arch POWER's linux-ppc64 configuration (64 KiB pages, ELFv2) and the
       big-endian amdgpu patches (command, MQD and ring byte order, display, VBIOS tables, HDMI/DP
-      info packets, VCE ring wrap, soft recovery) plus g5_cpu_temp. It installs next to
+      info packets, VCE ring wrap, soft recovery) plus g5_cpu_temp. Arch additions: ADDFB2 is
+      accepted on big-endian (Wayland compositors get real 10-bit/ARGB scanout formats instead of a
+      depth-24 fallback) and the text console uses the right byte order (was yellow). It installs next to
       linux-ppc64, which stays in the GRUB "Advanced options" menu as a fallback.
   mesa-rx550g5 vulkan-radeon-rx550g5 vulkan-swrast-rx550g5 vulkan-mesa-layers-rx550g5
   opencl-mesa-rx550g5
@@ -44,6 +46,16 @@ What this package does
 * X: the modesetting driver with a software cursor for amdgpu devices
   (/usr/share/X11/xorg.conf.d/20-rx550-g5.conf). Files in /etc/X11/xorg.conf.d take precedence.
 * An output connected after X started is switched on if nothing else is lit.
+* Suspend and hibernation are disabled (/usr/lib/systemd/sleep.conf.d/90-rx550-g5-no-suspend.conf):
+  the G5 does not wake from suspend, so an idle suspend looked like a hang.
+
+Desktop
+-------
+* KDE Plasma (Wayland) is the recommended session and works with these packages (10-bit scanout,
+  hardware cursor). Plasma (X11) also works for rendering, but plasma-workspace 6.7.5 has its own
+  big-endian bug: plasmashell reads the X11 screen index as a single byte, sees no screen and shows
+  a black desktop with only a cursor. A patch for KDE is in the rx550-g5 repository
+  (packaging/arch/kde/); until it is fixed upstream, use the Wayland session.
 
 Recovery
 --------

@@ -12,8 +12,16 @@ and conflicts with the Arch package of the same base name, so pacman asks to rep
   opencl-mesa-rx550g5          opencl-mesa (Rusticl on radeonsi)
 
 The source is the same commit as the Debian/MintPPC release 26.2.6-1+rx550g5.3 (branch g5-26 of
-mesa-rx550-be, which includes Debian's three Mesa patches), plus one build fix for glibc 2.44's
-native C11 threads (casts only). They use Arch POWER's llvm-libs 22, clang, libclc and
+mesa-rx550-be, which includes Debian's three Mesa patches), plus four Arch fixes:
+  0001  build fix for glibc 2.44's native C11 threads (pointer casts only)
+  0002  RADV: report the kernel page size as minImportedHostPointerAlignment
+        (VK_EXT_external_memory_host imports failed with 64 KiB pages)
+  0003  RADV: align sparse images to at least the CPU page size (4 KiB sparse
+        binds became overlapping 64 KiB mappings with 64 KiB pages)
+  0004  EGL/Wayland: use DRM byte-layout formats for 8-bit RGB visuals on
+        big-endian (every Wayland EGL client crashed in eglSwapBuffers)
+0002, 0003 and 0004 change nothing on little-endian hosts or with 4 KiB pages.
+They use Arch POWER's llvm-libs 22, clang, libclc and
 spirv-llvm-translator.
 
 OpenCL notes
@@ -32,7 +40,7 @@ OpenCL notes
 What changed compared with stock Mesa 26.2.6
 --------------------------------------------
 The full source diff is rx550-g5-vs-mesa-26.2.6.diff.gz in this directory
-(it includes the three Debian patches and the Arch build fix). Almost all of it only takes effect on
+(it includes the three Debian patches and the four Arch fixes). Almost all of it only takes effect on
 a big-endian CPU with a GFX8 GPU (Polaris: RX 460/470/480/550/560/570/580);
 other GPUs and CPUs get stock code.
 
@@ -58,9 +66,9 @@ Testing
 -------
 The Debian release built from this source was tested on a Power Mac G5 with an RX 550: Khronos
 GL CTS (17,887 cases), a stratified Vulkan CTS sample (63,560 cases), VA-API decode, VCE encode
-and the OpenCL CTS quick list. This Arch POWER build (different compiler, GCC 16, ELFv2 ABI,
-64 KiB pages) was checked on a Power Mac G5 Quad with an RX 550 with:
-@ARCH_TESTS@
+and the OpenCL CTS quick list. This Arch POWER build (GCC 16, ELFv2, 64 KiB pages) was tested on a Power Mac G5 Quad with an
+RX 550: GL/GLES CTS, Vulkan CTS sample, VA-API and OpenCL. Results: docs/STATUS.md in
+https://github.com/parabellum-push/rx550-g5 (section "Arch POWER").
 
 This is not a Khronos conformance submission.
 

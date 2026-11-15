@@ -1,0 +1,74 @@
+egl/wayland: use DRM byte-layout formats for 8-bit RGB visuals (fix big-endian)
+
+The Wayland visual table mapped DRM_FORMAT_ARGB8888 etc. to the native packed formats
+(PIPE_FORMAT_BGRA8888_UNORM ...). On big-endian those are A8R8G8B8 ..., so back buffers got the
+fourcc BGRA8888, dri2_wl_visual_idx_from_fourcc() returned -1 and create_wl_buffer() read
+modifiers[-1] (every Wayland EGL client crashed in eglSwapBuffers, e.g. plasmashell).
+Use the byte-layout formats that dri_helpers.c pairs with these fourccs and normalise native
+packed config formats to them. Same enum values on little endian: no change there.
+
+--- a/src/egl/drivers/dri2/platform_wayland.c
++++ b/src/egl/drivers/dri2/platform_wayland.c
+@@ -45,6 +45,7 @@
+ #include "util/perf/cpu_trace.h"
+ #include "util/u_vector.h"
+ #include "util/format/u_formats.h"
++#include "util/u_endian.h"
+ #include "main/glconfig.h"
+ #include "pipe/p_screen.h"
+ #include "egl_dri2.h"
+@@ -131,13 +132,13 @@
+    },
+    {
+       DRM_FORMAT_XRGB8888,
+-      PIPE_FORMAT_BGRX8888_UNORM,
++      PIPE_FORMAT_B8G8R8X8_UNORM,
+       PIPE_FORMAT_NONE,
+       DRM_FORMAT_XRGB8888,
+    },
+    {
+       DRM_FORMAT_ARGB8888,
+-      PIPE_FORMAT_BGRA8888_UNORM,
++      PIPE_FORMAT_B8G8R8A8_UNORM,
+       PIPE_FORMAT_NONE,
+       DRM_FORMAT_XRGB8888,
+    },
+@@ -149,13 +150,13 @@
+    },
+    {
+       DRM_FORMAT_ABGR8888,
+-      PIPE_FORMAT_RGBA8888_UNORM,
++      PIPE_FORMAT_R8G8B8A8_UNORM,
+       PIPE_FORMAT_NONE,
+       DRM_FORMAT_XBGR8888,
+    },
+    {
+       DRM_FORMAT_XBGR8888,
+-      PIPE_FORMAT_RGBX8888_UNORM,
++      PIPE_FORMAT_R8G8B8X8_UNORM,
+       PIPE_FORMAT_NONE,
+       DRM_FORMAT_XBGR8888,
+    },
+@@ -203,6 +204,22 @@
+    if (util_format_is_srgb(pipe_format))
+       pipe_format = util_format_linear(pipe_format);
+ 
++   /* The 8-bit RGB(A/X) visuals above use DRM's fixed byte layout (B8G8R8A8 = ARGB8888, ...),
++    * as dri_helpers.c does for DRM fourccs. EGL configs carry native packed formats
++    * (BGRA8888 = B8G8R8A8 on little endian, A8R8G8B8 on big endian): map them to the byte
++    * layout so that configs, back buffers and wl_buffer fourccs agree on big-endian hosts.
++    * No change on little endian, where the packed and array formats are the same enums.
++    */
++   if (UTIL_ARCH_BIG_ENDIAN) {
++      switch (pipe_format) {
++      case PIPE_FORMAT_BGRA8888_UNORM: pipe_format = PIPE_FORMAT_B8G8R8A8_UNORM; break;
++      case PIPE_FORMAT_BGRX8888_UNORM: pipe_format = PIPE_FORMAT_B8G8R8X8_UNORM; break;
++      case PIPE_FORMAT_RGBA8888_UNORM: pipe_format = PIPE_FORMAT_R8G8B8A8_UNORM; break;
++      case PIPE_FORMAT_RGBX8888_UNORM: pipe_format = PIPE_FORMAT_R8G8B8X8_UNORM; break;
++      default: break;
++      }
++   }
++
+    for (int i = 0; i < ARRAY_SIZE(dri2_wl_visuals); i++) {
+       if (dri2_wl_visuals[i].pipe_format == pipe_format)
+          return i;

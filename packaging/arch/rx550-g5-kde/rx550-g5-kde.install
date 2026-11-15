@@ -1,0 +1,9 @@
+post_install() {
+    /usr/lib/rx550-g5/kde-be-fix || true
+}
+post_upgrade() {
+    /usr/lib/rx550-g5/kde-be-fix || true
+}
+pre_remove() {
+    /usr/lib/rx550-g5/kde-be-fix --revert || true
+}

@@ -1,5 +1,26 @@
-{"pkgname":"rx550-g5","pkgver":"1.0+20261115.1-1","arch":"any","pkgdesc":"Radeon RX 550 support for big-endian Power Mac G5 (boot integration, driver options, X config)",
- "url":"https://github.com/parabellum-push/rx550-g5","license":["MIT"],
- "depend":["linux-ppc64-rx550g5","linux-firmware-amdgpu","mesa-rx550g5>=1:26.2.6.rx550g5.3","mesa-rx550g5<1:26.2.7","vulkan-radeon-rx550g5>=1:26.2.6.rx550g5.3","kmod","systemd"],
- "optdepend":["opencl-mesa-rx550g5: OpenCL (Rusticl) on the RX 550","xorg-xrandr: light an output connected after X started"],
- "backup":["etc/default/grub.d/90-rx550-g5.cfg"]}
+{
+ "pkgname": "rx550-g5",
+ "pkgver": "1.0+20261115.2-1",
+ "arch": "any",
+ "pkgdesc": "Radeon RX 550 support for big-endian Power Mac G5 (boot integration, driver options, X config)",
+ "url": "https://github.com/parabellum-push/rx550-g5",
+ "license": [
+  "MIT"
+ ],
+ "depend": [
+  "linux-ppc64-rx550g5",
+  "linux-firmware-amdgpu",
+  "mesa-rx550g5>=1:26.2.6.rx550g5.3",
+  "mesa-rx550g5<1:26.2.7",
+  "vulkan-radeon-rx550g5>=1:26.2.6.rx550g5.3",
+  "kmod",
+  "systemd"
+ ],
+ "optdepend": [
+  "opencl-mesa-rx550g5: OpenCL (Rusticl) on the RX 550",
+  "xorg-xrandr: light an output connected after X started"
+ ],
+ "backup": [
+  "etc/default/grub.d/90-rx550-g5.cfg"
+ ]
+}
